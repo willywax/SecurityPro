@@ -14,11 +14,11 @@ export default function Clients() {
           { key: 'name', label: 'Client Name' },
           { key: 'contact_name', label: 'Contact Person' },
           { key: 'billing_email', label: 'Billing Email' },
-          { key: 'status', label: 'Status', options: ['active', 'prospect', 'inactive'] },
+          { key: 'status', label: 'Status', options: ['active', 'inactive'] },
         ],
         submit: clientsApi.create,
       }}
-      filters={['all', 'active', 'prospect', 'inactive']}
+      filters={['all', 'active', 'inactive']}
       fields={[
         { key: 'name', label: 'Client', primary: true, sticky: true },
         { key: 'contact_name', label: 'Contact Person' },

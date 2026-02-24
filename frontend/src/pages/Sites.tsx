@@ -14,11 +14,11 @@ export default function Sites() {
           { key: 'client_id', label: 'Client ID' },
           { key: 'name', label: 'Site Name' },
           { key: 'region', label: 'Region' },
-          { key: 'status', label: 'Status', options: ['active', 'paused', 'inactive'] },
+          { key: 'status', label: 'Status', options: ['active', 'inactive'] },
         ],
         submit: sitesApi.create,
       }}
-      filters={['all', 'active', 'paused', 'inactive']}
+      filters={['all', 'active', 'inactive']}
       fields={[
         { key: 'name', label: 'Site', primary: true, sticky: true },
         { key: 'client_id', label: 'Client ID' },

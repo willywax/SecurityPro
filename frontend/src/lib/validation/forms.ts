@@ -6,14 +6,14 @@ export const clientFormSchema = z.object({
   name: z.string().min(2, 'Client name is required.'),
   contact_name: z.string().min(2, 'Contact name is required.'),
   billing_email: z.string().email('Billing email must be valid.'),
-  status: z.string().min(1, 'Status is required.'),
+  status: z.enum(['active', 'inactive'], { errorMap: () => ({ message: 'Status must be active or inactive.' }) }),
 });
 
 export const siteFormSchema = z.object({
   client_id: requiredId,
   name: z.string().min(2, 'Site name is required.'),
   region: z.string().min(2, 'Region is required.'),
-  status: z.string().min(1, 'Status is required.'),
+  status: z.enum(['active', 'inactive'], { errorMap: () => ({ message: 'Status must be active or inactive.' }) }),
 });
 
 export const guardFormSchema = z.object({
@@ -21,14 +21,14 @@ export const guardFormSchema = z.object({
   full_name: z.string().min(2, 'Full name is required.'),
   hire_date: z.string().date('Hire date must be a valid date.'),
   base_salary_monthly: z.coerce.number().positive('Base salary must be positive.'),
-  status: z.string().min(1, 'Status is required.'),
+  status: z.enum(['active', 'inactive', 'suspended', 'terminated', 'on_leave'], { errorMap: () => ({ message: 'Invalid guard status.' }) }),
 });
 
 export const assetFormSchema = z.object({
   asset_tag: z.string().min(1, 'Asset tag is required.'),
   type: z.string().min(2, 'Asset type is required.'),
   name: z.string().optional(),
-  status: z.string().min(1, 'Status is required.'),
+  status: z.enum(['available', 'issued', 'maintenance', 'retired', 'lost'], { errorMap: () => ({ message: 'Invalid asset status.' }) }),
 });
 
 export const invoiceFormSchema = z.object({
@@ -44,13 +44,13 @@ export const paymentFormSchema = z.object({
   client_id: requiredId,
   payment_date: z.string().date('Payment date must be valid.'),
   amount: z.coerce.number().positive('Amount must be positive.'),
-  method: z.string().min(2, 'Payment method is required.'),
+  method: z.enum(['cash', 'bank', 'mobile_money', 'cheque', 'other'], { errorMap: () => ({ message: 'Invalid payment method.' }) }),
   reference: z.string().optional(),
 });
 
 export const payrollAdjustmentFormSchema = z.object({
   payroll_item_id: requiredId,
-  type: z.string().min(2, 'Adjustment type is required.'),
+  type: z.enum(['allowance', 'deduction', 'overtime'], { errorMap: () => ({ message: 'Invalid adjustment type.' }) }),
   label: z.string().min(2, 'Adjustment label is required.'),
   amount: z.coerce.number().refine((v) => v !== 0, 'Amount cannot be zero.'),
 });

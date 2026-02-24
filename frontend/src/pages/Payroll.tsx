@@ -12,7 +12,7 @@ export default function Payroll() {
         initialValues: { payroll_item_id: '', type: 'allowance', label: '', amount: '0' },
         fields: [
           { key: 'payroll_item_id', label: 'Payroll Item ID' },
-          { key: 'type', label: 'Type', options: ['allowance', 'deduction'] },
+          { key: 'type', label: 'Type', options: ['allowance', 'deduction', 'overtime'] },
           { key: 'label', label: 'Label' },
           { key: 'amount', label: 'Amount', type: 'number' },
         ],
@@ -23,7 +23,7 @@ export default function Payroll() {
             amount: values.amount,
           }),
       }}
-      filters={['all', 'draft', 'approved', 'paid']}
+      filters={['all', 'draft', 'locked', 'paid']}
       hideCardFallback
       fields={[
         { key: 'month', label: 'Month', primary: true, sticky: true },

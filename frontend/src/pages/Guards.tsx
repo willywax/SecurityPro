@@ -15,11 +15,11 @@ export default function Guards() {
           { key: 'full_name', label: 'Full Name' },
           { key: 'hire_date', label: 'Hire Date', type: 'date' },
           { key: 'base_salary_monthly', label: 'Base Salary', type: 'number' },
-          { key: 'status', label: 'Status', options: ['active', 'inactive', 'on_leave'] },
+          { key: 'status', label: 'Status', options: ['active', 'inactive', 'suspended', 'terminated', 'on_leave'] },
         ],
         submit: guardsApi.create,
       }}
-      filters={['all', 'active', 'inactive', 'on_leave']}
+      filters={['all', 'active', 'inactive', 'suspended', 'terminated', 'on_leave']}
       fields={[
         { key: 'guard_no', label: 'Guard No', primary: true, sticky: true },
         { key: 'full_name', label: 'Full Name' },
