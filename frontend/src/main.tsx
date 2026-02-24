@@ -4,7 +4,11 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import './index.css';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
-import SimpleCrudPage from './pages/SimpleCrudPage';
+import Guards from './pages/Guards';
+import Clients from './pages/Clients';
+import Sites from './pages/Sites';
+import Assets from './pages/Assets';
+import Payroll from './pages/Payroll';
 import Invoices from './pages/Invoices';
 import Payments from './pages/Payments';
 import Card from './components/ui/Card';
@@ -14,11 +18,11 @@ const App = () => (
     <Routes>
       <Route path='/' element={<Layout />}>
         <Route index element={<Dashboard />} />
-        <Route path='guards' element={<SimpleCrudPage title='Guards' path='guards' fields={['guard_no', 'full_name', 'hire_date', 'base_salary_monthly']} />} />
-        <Route path='clients' element={<SimpleCrudPage title='Clients' path='clients' fields={['name', 'contact_name', 'billing_email']} />} />
-        <Route path='sites' element={<SimpleCrudPage title='Sites' path='sites' fields={['client_id', 'name', 'region']} />} />
-        <Route path='assets' element={<SimpleCrudPage title='Assets' path='assets' fields={['asset_tag', 'type', 'name']} />} />
-        <Route path='payroll' element={<SimpleCrudPage title='Payroll Months' path='payroll-months' fields={['month']} />} />
+        <Route path='guards' element={<Guards />} />
+        <Route path='clients' element={<Clients />} />
+        <Route path='sites' element={<Sites />} />
+        <Route path='assets' element={<Assets />} />
+        <Route path='payroll' element={<Payroll />} />
         <Route path='invoices' element={<Invoices />} />
         <Route path='payments' element={<Payments />} />
         <Route
