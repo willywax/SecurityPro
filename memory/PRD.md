@@ -56,12 +56,22 @@ Build a multi-tenant SaaS monorepo called "Security Operations SaaS" for securit
 - ✅ Site detail shows parent client name with link
 - ✅ All IDs in system are auto-generated
 
+### Phase 4 - Assets Module (March 19, 2026)
+- ✅ Asset list page (/assets) with type filter + status filter + search
+- ✅ Asset detail/create/edit page (/assets/:id) with Details + Issuance History tabs
+- ✅ Asset ID auto-generated (ASSET0001, ASSET0002...)
+- ✅ Issue asset to employee or site via dialog
+- ✅ Return asset action with return condition + lost flag
+- ✅ Asset status auto-updates: available → issued → available/lost
+
 ### Auto-Generated ID Formats
 - Employee: EMP0001
 - Guard No: G0001
 - Client: CLT0001
 - Site: SITE001
 - Contract: CTR-2026-0001
+
+- Asset: ASSET0001
 
 ### API Endpoints
 
@@ -90,11 +100,18 @@ Build a multi-tenant SaaS monorepo called "Security Operations SaaS" for securit
 - GET/POST /api/sites
 - GET/PUT/DELETE /api/sites/:id
 
+**Assets:**
+- GET/POST /api/assets
+- GET/PUT/DELETE /api/assets/:id
+- GET /api/assets/:id/issuances
+- POST /api/assets/:id/issue
+- PUT /api/assets/:id/issuances/:iid/return
+
 ## Prioritized Backlog
 
 ### P0 - Next Up
-- [ ] Employee Documents tab with file uploads (PDF/images)
-- [ ] Assets Module (asset list, create, issuance to employees)
+- [ ] Payroll processing module
+- [ ] Invoice generation module
 
 ### P1 - High Priority
 - [ ] Payroll processing module
