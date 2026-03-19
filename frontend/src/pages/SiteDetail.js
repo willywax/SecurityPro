@@ -77,6 +77,8 @@ const SiteDetail = () => {
         const response = await api.get(`/sites/${id}`);
         setSite(response.data);
         setFormData(response.data);
+        setIsEditing(false); // Always view mode after data loads
+        setErrors({});
       } catch (error) {
         if (error.response?.status === 404) {
           toast.error('Site not found');

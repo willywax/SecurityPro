@@ -35,73 +35,77 @@ Build a multi-tenant SaaS monorepo called "Security Operations SaaS" for securit
 - ✅ Database seeding (admin user + demo org)
 
 ### Phase 2 - HR Records Module (March 19, 2026)
-- ✅ Employee list page with search, filter by status, pagination
-- ✅ Mobile card layout for employee list
+- ✅ Employee list page with search, filter by status, pagination, colored avatar initials
 - ✅ Employee create form with validation
-- ✅ Employee detail page with tab shell
-- ✅ Profile tab - full CRUD functionality
-- ✅ Profile photo upload/delete
-- ✅ Other tabs show "Coming soon" placeholder:
-  - Bank Details
-  - Referees
-  - Next of Kin
-  - Contracts
-  - Assets Issued
-  - Documents
+- ✅ Employee detail page with tabbed interface
+- ✅ Profile tab - full CRUD with profile photo upload/delete
+- ✅ Bank Details tab - full CRUD
+- ✅ Referees tab - full CRUD with ID document upload
+- ✅ Next of Kin tab - full CRUD with ID document upload
+- ✅ Employment History tab - full CRUD
+- ✅ Contracts tab - full CRUD, contract_number auto-generated (CTR-YYYY-XXXX)
+- ✅ Employee ID (EMP0001) and Guard No (G0001) auto-generated
 
-### Employee Profile Fields
-- employee_id, guard_no, profile_photo
-- first_name, middle_name, last_name
-- gender, date_of_birth, marital_status
-- nationality, NIN
-- phone_1, phone_2, email
-- physical_address, postal_address
-- education_background, job_title
-- employment_status, hire_date, termination_date
-- notes
+### Phase 3 - Clients & Sites Module (March 19, 2026)
+- ✅ Client list page (/clients) with search + status filter (active/inactive/prospect)
+- ✅ Client detail/create/edit page (/clients/new, /clients/:id)
+- ✅ Client ID auto-generated (CLT0001, CLT0002...)
+- ✅ Site list page (/sites) with search + client filter + status filter
+- ✅ Site detail/create/edit page (/sites/new, /sites/:id)
+- ✅ Site ID auto-generated (SITE001, SITE002...)
+- ✅ Site detail shows parent client name with link
+- ✅ All IDs in system are auto-generated
 
-### API Endpoints (New)
-- GET /api/employees - List with pagination, search, filter
-- POST /api/employees - Create employee (auto-generates IDs)
-- GET /api/employees/:id - Get single employee
-- PUT /api/employees/:id - Update employee
-- DELETE /api/employees/:id - Delete employee
-- POST /api/employees/:id/photo - Upload photo
-- DELETE /api/employees/:id/photo - Delete photo
-- **Bank Account:**
-  - GET/POST/PUT/DELETE /api/employees/:id/bank-account
-- **Referees:**
-  - GET /api/employees/:id/referees - List all
-  - POST /api/employees/:id/referees - Create
-  - GET/PUT/DELETE /api/employees/:id/referees/:ref_id
-  - POST/DELETE /api/employees/:id/referees/:ref_id/id-document
-- **Next of Kin:**
-  - GET/POST/PUT/DELETE /api/employees/:id/next-of-kin
-  - POST/DELETE /api/employees/:id/next-of-kin/id-document
+### Auto-Generated ID Formats
+- Employee: EMP0001
+- Guard No: G0001
+- Client: CLT0001
+- Site: SITE001
+- Contract: CTR-2026-0001
+
+### API Endpoints
+
+**Auth:**
+- POST /api/auth/login
+- POST /api/auth/refresh
+- GET /api/users/me
+
+**Employees:**
+- GET/POST /api/employees
+- GET/PUT/DELETE /api/employees/:id
+- POST/DELETE /api/employees/:id/photo
+- GET/POST/PUT/DELETE /api/employees/:id/bank-account
+- GET/POST /api/employees/:id/referees
+- GET/PUT/DELETE /api/employees/:id/referees/:ref_id
+- GET/POST /api/employees/:id/next-of-kin
+- GET/POST/PUT/DELETE /api/employees/:id/employment-history
+- GET/POST /api/employees/:id/contracts
+- GET/PUT/DELETE /api/employees/:id/contracts/:cid
+
+**Clients:**
+- GET/POST /api/clients
+- GET/PUT/DELETE /api/clients/:id
+
+**Sites:**
+- GET/POST /api/sites
+- GET/PUT/DELETE /api/sites/:id
 
 ## Prioritized Backlog
 
-### P0 - Critical (Next Phase)
-- [ ] Contracts tab implementation
-- [ ] Documents tab with file uploads
-- [ ] Client management
+### P0 - Next Up
+- [ ] Employee Documents tab with file uploads (PDF/images)
+- [ ] Assets Module (asset list, create, issuance to employees)
 
 ### P1 - High Priority
-- [ ] Site management
-- [ ] Asset tracking & issuance
-- [ ] Assets Issued tab on employee profile
+- [ ] Payroll processing module
+- [ ] Invoice generation module
+- [ ] Payments module
 
-### P2 - Medium Priority
+### P2 - Future
 - [ ] Shift scheduling
 - [ ] Attendance tracking
-- [ ] Basic payroll processing
-- [ ] Invoice generation
-
-### P3 - Future Enhancements
 - [ ] Reports & analytics
 - [ ] Email notifications
-- [ ] Mobile app
-- [ ] Integrations (payroll systems, accounting)
 
 ## Default Credentials
 - Email: admin@securityops.com
@@ -114,8 +118,27 @@ Build a multi-tenant SaaS monorepo called "Security Operations SaaS" for securit
 - **Database**: MongoDB
 - **Auth**: JWT access + refresh tokens
 
-## Next Tasks
-1. Implement Bank Details tab CRUD
-2. Implement Referees tab CRUD
-3. Implement Next of Kin tab CRUD
-4. Add Client management module
+## Code Architecture
+```
+/app
+├── backend/
+│   ├── routers/
+│   │   ├── auth.py
+│   │   ├── employees.py   # HR + sub-resources
+│   │   ├── clients.py     # Module 2
+│   │   └── sites.py       # Module 3
+│   ├── models/__init__.py  # All 18 Pydantic models
+│   ├── utils/auth.py
+│   ├── server.py
+│   └── seed.py
+├── frontend/
+│   └── src/
+│       ├── pages/
+│       │   ├── Login.js, Dashboard.js
+│       │   ├── EmployeeList.js, EmployeeCreate.js, EmployeeDetail.js
+│       │   ├── ClientList.js, ClientDetail.js
+│       │   └── SiteList.js, SiteDetail.js
+│       ├── components/layout/
+│       └── context/AuthContext.js
+└── memory/PRD.md
+```

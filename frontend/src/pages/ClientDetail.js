@@ -68,6 +68,8 @@ const ClientDetail = () => {
         const response = await api.get(`/clients/${id}`);
         setClient(response.data);
         setFormData(response.data);
+        setIsEditing(false); // Always view mode after data loads
+        setErrors({});
       } catch (error) {
         if (error.response?.status === 404) {
           toast.error('Client not found');
