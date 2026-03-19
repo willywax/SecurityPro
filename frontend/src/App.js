@@ -17,6 +17,9 @@ import AssetDetail from './pages/AssetDetail';
 import PayrollList from './pages/PayrollList';
 import PayrollCreate from './pages/PayrollCreate';
 import PayrollDetail from './pages/PayrollDetail';
+import InvoiceList from './pages/InvoiceList';
+import InvoiceCreate from './pages/InvoiceCreate';
+import InvoiceDetail from './pages/InvoiceDetail';
 import { Toaster } from './components/ui/sonner';
 
 // Placeholder pages for navigation items
@@ -57,7 +60,9 @@ function App() {
             <Route path="/payroll" element={<PayrollList />} />
             <Route path="/payroll/new" element={<PayrollCreate />} />
             <Route path="/payroll/:id" element={<PayrollDetail />} />
-            <Route path="/invoices" element={<PlaceholderPage title="Invoices" />} />
+            <Route path="/invoices" element={<InvoiceList />} />
+            <Route path="/invoices/new" element={<InvoiceCreate />} />
+            <Route path="/invoices/:id" element={<InvoiceDetail />} />
             <Route path="/settings" element={<PlaceholderPage title="Settings" />} />
           </Route>
 
