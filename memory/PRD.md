@@ -62,26 +62,34 @@ Build a multi-tenant SaaS monorepo called "Security Operations SaaS" for securit
 
 ### API Endpoints (New)
 - GET /api/employees - List with pagination, search, filter
-- POST /api/employees - Create employee
+- POST /api/employees - Create employee (auto-generates IDs)
 - GET /api/employees/:id - Get single employee
 - PUT /api/employees/:id - Update employee
 - DELETE /api/employees/:id - Delete employee
 - POST /api/employees/:id/photo - Upload photo
 - DELETE /api/employees/:id/photo - Delete photo
+- **Bank Account:**
+  - GET/POST/PUT/DELETE /api/employees/:id/bank-account
+- **Referees:**
+  - GET /api/employees/:id/referees - List all
+  - POST /api/employees/:id/referees - Create
+  - GET/PUT/DELETE /api/employees/:id/referees/:ref_id
+  - POST/DELETE /api/employees/:id/referees/:ref_id/id-document
+- **Next of Kin:**
+  - GET/POST/PUT/DELETE /api/employees/:id/next-of-kin
+  - POST/DELETE /api/employees/:id/next-of-kin/id-document
 
 ## Prioritized Backlog
 
 ### P0 - Critical (Next Phase)
-- [ ] Bank Details tab implementation
-- [ ] Referees tab implementation
-- [ ] Next of Kin tab implementation
+- [ ] Contracts tab implementation
+- [ ] Documents tab with file uploads
 - [ ] Client management
 
 ### P1 - High Priority
-- [ ] Contracts tab implementation
-- [ ] Documents tab with file uploads
 - [ ] Site management
 - [ ] Asset tracking & issuance
+- [ ] Assets Issued tab on employee profile
 
 ### P2 - Medium Priority
 - [ ] Shift scheduling
