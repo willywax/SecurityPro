@@ -31,6 +31,8 @@ import {
   Loader2,
 } from 'lucide-react';
 
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+
 const statusColors = {
   active: 'bg-emerald-100 text-emerald-700 border-emerald-200',
   inactive: 'bg-slate-100 text-slate-700 border-slate-200',
@@ -43,6 +45,47 @@ const statusLabels = {
   inactive: 'Inactive',
   terminated: 'Terminated',
   on_leave: 'On Leave',
+};
+
+// Avatar component with photo or initials fallback
+const EmployeeAvatar = ({ employee, size = 'md' }) => {
+  const sizeClasses = {
+    sm: 'w-8 h-8 text-xs',
+    md: 'w-10 h-10 text-sm',
+    lg: 'w-12 h-12 text-base',
+  };
+  
+  const getInitials = () => {
+    const first = employee.first_name?.[0] || '';
+    const last = employee.last_name?.[0] || '';
+    return (first + last).toUpperCase();
+  };
+  
+  // Generate consistent background color based on name
+  const getAvatarColor = () => {
+    const colors = [
+      'bg-blue-500', 'bg-emerald-500', 'bg-amber-500', 'bg-rose-500',
+      'bg-purple-500', 'bg-cyan-500', 'bg-indigo-500', 'bg-teal-500'
+    ];
+    const index = (employee.first_name?.charCodeAt(0) || 0) % colors.length;
+    return colors[index];
+  };
+  
+  if (employee.profile_photo) {
+    return (
+      <img
+        src={`${BACKEND_URL}${employee.profile_photo}`}
+        alt={employee.full_name}
+        className={`${sizeClasses[size]} rounded-full object-cover flex-shrink-0`}
+      />
+    );
+  }
+  
+  return (
+    <div className={`${sizeClasses[size]} ${getAvatarColor()} rounded-full flex items-center justify-center flex-shrink-0`}>
+      <span className="font-medium text-white">{getInitials()}</span>
+    </div>
+  );
 };
 
 const EmployeeList = () => {
@@ -210,17 +253,7 @@ const EmployeeList = () => {
                   >
                     <TableCell>
                       <div className="flex items-center gap-3">
-                        {employee.profile_photo ? (
-                          <img
-                            src={`${process.env.REACT_APP_BACKEND_URL}${employee.profile_photo}`}
-                            alt={employee.full_name}
-                            className="w-10 h-10 rounded-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center">
-                            <User className="w-5 h-5 text-slate-400" />
-                          </div>
-                        )}
+                        <EmployeeAvatar employee={employee} size="md" />
                         <div>
                           <p className="font-medium text-slate-900">{employee.full_name}</p>
                           {employee.email && (
@@ -271,17 +304,7 @@ const EmployeeList = () => {
                 <Card className="hover:border-slate-300 transition-colors">
                   <CardContent className="p-4">
                     <div className="flex items-start gap-3">
-                      {employee.profile_photo ? (
-                        <img
-                          src={`${process.env.REACT_APP_BACKEND_URL}${employee.profile_photo}`}
-                          alt={employee.full_name}
-                          className="w-12 h-12 rounded-full object-cover flex-shrink-0"
-                        />
-                      ) : (
-                        <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
-                          <User className="w-6 h-6 text-slate-400" />
-                        </div>
-                      )}
+                      <EmployeeAvatar employee={employee} size="lg" />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-2">
                           <div>

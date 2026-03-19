@@ -60,6 +60,21 @@ class IDType(str, Enum):
     OTHER = "other"
 
 
+class ContractStatus(str, Enum):
+    DRAFT = "draft"
+    ACTIVE = "active"
+    EXPIRED = "expired"
+    TERMINATED = "terminated"
+
+
+class ContractType(str, Enum):
+    PERMANENT = "permanent"
+    FIXED_TERM = "fixed_term"
+    CASUAL = "casual"
+    PROBATION = "probation"
+    PART_TIME = "part_time"
+
+
 # ============ EMPLOYEE SCHEMAS ============
 
 class EmployeeCreate(BaseModel):
@@ -257,6 +272,96 @@ class NextOfKinResponse(BaseModel):
 
 class MessageResponse(BaseModel):
     message: str
+
+
+# ============ EMPLOYMENT HISTORY SCHEMAS ============
+
+class EmploymentHistoryCreate(BaseModel):
+    employer_name: str
+    job_title: str
+    start_date: date
+    end_date: Optional[date] = None
+    reason_for_leaving: Optional[str] = None
+    reference_contact: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class EmploymentHistoryUpdate(BaseModel):
+    employer_name: Optional[str] = None
+    job_title: Optional[str] = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    reason_for_leaving: Optional[str] = None
+    reference_contact: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class EmploymentHistoryResponse(BaseModel):
+    id: str
+    employee_id: str
+    employer_name: str
+    job_title: str
+    start_date: str
+    end_date: Optional[str] = None
+    reason_for_leaving: Optional[str] = None
+    reference_contact: Optional[str] = None
+    notes: Optional[str] = None
+    created_at: str
+    updated_at: str
+
+
+# ============ CONTRACT SCHEMAS ============
+
+class ContractCreate(BaseModel):
+    contract_type: ContractType
+    start_date: date
+    end_date: Optional[date] = None
+    duration_months: Optional[int] = None
+    probation_months: Optional[int] = None
+    salary_amount: Optional[float] = None
+    job_title_on_contract: Optional[str] = None
+    workstation_site: Optional[str] = None
+    signed_date: Optional[date] = None
+    employee_signed: bool = False
+    employer_signed: bool = False
+    status: ContractStatus = ContractStatus.DRAFT
+
+
+class ContractUpdate(BaseModel):
+    contract_type: Optional[ContractType] = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    duration_months: Optional[int] = None
+    probation_months: Optional[int] = None
+    salary_amount: Optional[float] = None
+    job_title_on_contract: Optional[str] = None
+    workstation_site: Optional[str] = None
+    signed_date: Optional[date] = None
+    employee_signed: Optional[bool] = None
+    employer_signed: Optional[bool] = None
+    status: Optional[ContractStatus] = None
+
+
+class ContractResponse(BaseModel):
+    id: str
+    employee_id: str
+    org_id: Optional[str] = None
+    contract_number: str
+    contract_type: str
+    start_date: str
+    end_date: Optional[str] = None
+    duration_months: Optional[int] = None
+    probation_months: Optional[int] = None
+    salary_amount: Optional[float] = None
+    job_title_on_contract: Optional[str] = None
+    workstation_site: Optional[str] = None
+    signed_date: Optional[str] = None
+    employee_signed: bool
+    employer_signed: bool
+    contract_document_file: Optional[str] = None
+    status: str
+    created_at: str
+    updated_at: str
 
 
 # ============ HELPER FUNCTIONS ============
@@ -1257,3 +1362,446 @@ async def delete_next_of_kin_id_document(
     )
     
     return NextOfKinResponse(**updated)
+
+
+
+# ============ EMPLOYMENT HISTORY ENDPOINTS ============
+
+@router.get("/{employee_uuid}/employment-history", response_model=List[EmploymentHistoryResponse])
+async def list_employment_history(
+    employee_uuid: str,
+    token_data: dict = Depends(get_token_data)
+):
+    """List all employment history for an employee (chronological order)"""
+    org_id = token_data.get("org_id")
+    await verify_employee_access(employee_uuid, org_id)
+    
+    cursor = db.employee_employment_history.find(
+        {"employee_id": employee_uuid},
+        {"_id": 0}
+    ).sort("start_date", -1)
+    
+    history = await cursor.to_list(length=100)
+    return [EmploymentHistoryResponse(**h) for h in history]
+
+
+@router.post("/{employee_uuid}/employment-history", response_model=EmploymentHistoryResponse, status_code=status.HTTP_201_CREATED)
+async def create_employment_history(
+    employee_uuid: str,
+    data: EmploymentHistoryCreate,
+    token_data: dict = Depends(get_token_data)
+):
+    """Create employment history entry"""
+    org_id = token_data.get("org_id")
+    await verify_employee_access(employee_uuid, org_id)
+    
+    now = datetime.now(timezone.utc).isoformat()
+    history_doc = {
+        "id": str(uuid.uuid4()),
+        "employee_id": employee_uuid,
+        "employer_name": data.employer_name,
+        "job_title": data.job_title,
+        "start_date": data.start_date.isoformat(),
+        "end_date": data.end_date.isoformat() if data.end_date else None,
+        "reason_for_leaving": data.reason_for_leaving,
+        "reference_contact": data.reference_contact,
+        "notes": data.notes,
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.employee_employment_history.insert_one(history_doc)
+    return EmploymentHistoryResponse(**history_doc)
+
+
+@router.get("/{employee_uuid}/employment-history/{history_id}", response_model=EmploymentHistoryResponse)
+async def get_employment_history(
+    employee_uuid: str,
+    history_id: str,
+    token_data: dict = Depends(get_token_data)
+):
+    """Get a single employment history entry"""
+    org_id = token_data.get("org_id")
+    await verify_employee_access(employee_uuid, org_id)
+    
+    history = await db.employee_employment_history.find_one(
+        {"id": history_id, "employee_id": employee_uuid},
+        {"_id": 0}
+    )
+    
+    if not history:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Employment history not found"
+        )
+    
+    return EmploymentHistoryResponse(**history)
+
+
+@router.put("/{employee_uuid}/employment-history/{history_id}", response_model=EmploymentHistoryResponse)
+async def update_employment_history(
+    employee_uuid: str,
+    history_id: str,
+    data: EmploymentHistoryUpdate,
+    token_data: dict = Depends(get_token_data)
+):
+    """Update employment history entry"""
+    org_id = token_data.get("org_id")
+    await verify_employee_access(employee_uuid, org_id)
+    
+    existing = await db.employee_employment_history.find_one(
+        {"id": history_id, "employee_id": employee_uuid}
+    )
+    if not existing:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Employment history not found"
+        )
+    
+    update_doc = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    update_dict = data.model_dump(exclude_unset=True)
+    for key, value in update_dict.items():
+        if value is not None:
+            if key in ["start_date", "end_date"] and isinstance(value, date):
+                update_doc[key] = value.isoformat()
+            else:
+                update_doc[key] = value
+    
+    await db.employee_employment_history.update_one(
+        {"id": history_id, "employee_id": employee_uuid},
+        {"$set": update_doc}
+    )
+    
+    updated = await db.employee_employment_history.find_one(
+        {"id": history_id, "employee_id": employee_uuid},
+        {"_id": 0}
+    )
+    
+    return EmploymentHistoryResponse(**updated)
+
+
+@router.delete("/{employee_uuid}/employment-history/{history_id}", response_model=MessageResponse)
+async def delete_employment_history(
+    employee_uuid: str,
+    history_id: str,
+    token_data: dict = Depends(get_token_data)
+):
+    """Delete employment history entry"""
+    org_id = token_data.get("org_id")
+    await verify_employee_access(employee_uuid, org_id)
+    
+    result = await db.employee_employment_history.delete_one(
+        {"id": history_id, "employee_id": employee_uuid}
+    )
+    
+    if result.deleted_count == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Employment history not found"
+        )
+    
+    return MessageResponse(message="Employment history deleted successfully")
+
+
+# ============ CONTRACT ENDPOINTS ============
+
+CONTRACTS_DIR = UPLOAD_DIR / "contracts"
+CONTRACTS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+async def auto_update_contract_status(employee_uuid: str):
+    """Auto-update contract statuses: active → expired when end_date passes"""
+    today = datetime.now(timezone.utc).date().isoformat()
+
+    # Find active contracts with passed end_date
+    await db.employee_contracts.update_many(
+        {
+            "employee_id": employee_uuid,
+            "status": "active",
+            "end_date": {"$ne": None, "$lt": today}
+        },
+        {"$set": {"status": "expired", "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+
+
+async def generate_contract_number(org_id: str) -> str:
+    """Generate contract number like CTR-2026-0001 per org per year"""
+    year = datetime.now(timezone.utc).year
+    cursor = db.employee_contracts.find(
+        {"org_id": org_id, "contract_number": {"$regex": f"^CTR-{year}-"}},
+        {"contract_number": 1, "_id": 0}
+    ).sort("contract_number", -1).limit(1)
+
+    last = await cursor.to_list(length=1)
+
+    if last and last[0].get("contract_number"):
+        try:
+            seq = int(last[0]["contract_number"].split("-")[-1])
+            return f"CTR-{year}-{str(seq + 1).zfill(4)}"
+        except ValueError:
+            pass
+
+    return f"CTR-{year}-0001"
+
+
+@router.get("/{employee_uuid}/contracts", response_model=List[ContractResponse])
+async def list_contracts(
+    employee_uuid: str,
+    token_data: dict = Depends(get_token_data)
+):
+    """List all contracts for an employee"""
+    org_id = token_data.get("org_id")
+    await verify_employee_access(employee_uuid, org_id)
+    
+    # Auto-update expired contracts
+    await auto_update_contract_status(employee_uuid)
+    
+    cursor = db.employee_contracts.find(
+        {"employee_id": employee_uuid},
+        {"_id": 0}
+    ).sort("created_at", -1)
+    
+    contracts = await cursor.to_list(length=100)
+    return [ContractResponse(**c) for c in contracts]
+
+
+@router.post("/{employee_uuid}/contracts", response_model=ContractResponse, status_code=status.HTTP_201_CREATED)
+async def create_contract(
+    employee_uuid: str,
+    data: ContractCreate,
+    token_data: dict = Depends(get_token_data)
+):
+    """Create a contract for an employee"""
+    org_id = token_data.get("org_id")
+    await verify_employee_access(employee_uuid, org_id)
+    
+    # Auto-generate contract number
+    contract_number = await generate_contract_number(org_id)
+    now = datetime.now(timezone.utc).isoformat()
+    contract_doc = {
+        "id": str(uuid.uuid4()),
+        "org_id": org_id,
+        "employee_id": employee_uuid,
+        "contract_number": contract_number,
+        "contract_type": data.contract_type.value,
+        "start_date": data.start_date.isoformat(),
+        "end_date": data.end_date.isoformat() if data.end_date else None,
+        "duration_months": data.duration_months,
+        "probation_months": data.probation_months,
+        "salary_amount": data.salary_amount,
+        "job_title_on_contract": data.job_title_on_contract,
+        "workstation_site": data.workstation_site,
+        "signed_date": data.signed_date.isoformat() if data.signed_date else None,
+        "employee_signed": data.employee_signed,
+        "employer_signed": data.employer_signed,
+        "contract_document_file": None,
+        "status": data.status.value,
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.employee_contracts.insert_one(contract_doc)
+    return ContractResponse(**contract_doc)
+
+
+@router.get("/{employee_uuid}/contracts/{contract_id}", response_model=ContractResponse)
+async def get_contract(
+    employee_uuid: str,
+    contract_id: str,
+    token_data: dict = Depends(get_token_data)
+):
+    """Get a single contract"""
+    org_id = token_data.get("org_id")
+    await verify_employee_access(employee_uuid, org_id)
+    
+    contract = await db.employee_contracts.find_one(
+        {"id": contract_id, "employee_id": employee_uuid},
+        {"_id": 0}
+    )
+    
+    if not contract:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Contract not found"
+        )
+    
+    return ContractResponse(**contract)
+
+
+@router.put("/{employee_uuid}/contracts/{contract_id}", response_model=ContractResponse)
+async def update_contract(
+    employee_uuid: str,
+    contract_id: str,
+    data: ContractUpdate,
+    token_data: dict = Depends(get_token_data)
+):
+    """Update a contract"""
+    org_id = token_data.get("org_id")
+    await verify_employee_access(employee_uuid, org_id)
+    
+    existing = await db.employee_contracts.find_one(
+        {"id": contract_id, "employee_id": employee_uuid}
+    )
+    if not existing:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Contract not found"
+        )
+    
+    update_doc = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    update_dict = data.model_dump(exclude_unset=True)
+    for key, value in update_dict.items():
+        if value is not None:
+            if key in ["start_date", "end_date", "signed_date"] and isinstance(value, date):
+                update_doc[key] = value.isoformat()
+            elif key in ["contract_type", "status"] and hasattr(value, "value"):
+                update_doc[key] = value.value
+            else:
+                update_doc[key] = value
+    
+    await db.employee_contracts.update_one(
+        {"id": contract_id, "employee_id": employee_uuid},
+        {"$set": update_doc}
+    )
+    
+    updated = await db.employee_contracts.find_one(
+        {"id": contract_id, "employee_id": employee_uuid},
+        {"_id": 0}
+    )
+    
+    return ContractResponse(**updated)
+
+
+@router.delete("/{employee_uuid}/contracts/{contract_id}", response_model=MessageResponse)
+async def delete_contract(
+    employee_uuid: str,
+    contract_id: str,
+    token_data: dict = Depends(get_token_data)
+):
+    """Delete a contract"""
+    org_id = token_data.get("org_id")
+    await verify_employee_access(employee_uuid, org_id)
+    
+    contract = await db.employee_contracts.find_one(
+        {"id": contract_id, "employee_id": employee_uuid}
+    )
+    
+    if not contract:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Contract not found"
+        )
+    
+    # Delete file if exists
+    if contract.get("contract_document_file"):
+        filepath = CONTRACTS_DIR / contract["contract_document_file"].split("/")[-1]
+        if filepath.exists():
+            filepath.unlink()
+    
+    await db.employee_contracts.delete_one({"id": contract_id, "employee_id": employee_uuid})
+    
+    return MessageResponse(message="Contract deleted successfully")
+
+
+@router.post("/{employee_uuid}/contracts/{contract_id}/document", response_model=ContractResponse)
+async def upload_contract_document(
+    employee_uuid: str,
+    contract_id: str,
+    file: UploadFile = File(...),
+    token_data: dict = Depends(get_token_data)
+):
+    """Upload contract document (PDF)"""
+    org_id = token_data.get("org_id")
+    await verify_employee_access(employee_uuid, org_id)
+    
+    contract = await db.employee_contracts.find_one(
+        {"id": contract_id, "employee_id": employee_uuid}
+    )
+    if not contract:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Contract not found"
+        )
+    
+    allowed_types = ["application/pdf", "image/jpeg", "image/png", "image/webp"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid file type. Allowed: PDF, JPEG, PNG, WebP"
+        )
+    
+    content = await file.read()
+    if len(content) > 20 * 1024 * 1024:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File size exceeds 20MB limit"
+        )
+    
+    ext = file.filename.split(".")[-1] if "." in file.filename else "pdf"
+    filename = f"contract_{contract_id}.{ext}"
+    filepath = CONTRACTS_DIR / filename
+    
+    # Delete old file
+    if contract.get("contract_document_file"):
+        old_path = CONTRACTS_DIR / contract["contract_document_file"].split("/")[-1]
+        if old_path.exists():
+            old_path.unlink()
+    
+    with open(filepath, "wb") as f:
+        f.write(content)
+    
+    file_url = f"/uploads/contracts/{filename}"
+    await db.employee_contracts.update_one(
+        {"id": contract_id, "employee_id": employee_uuid},
+        {"$set": {
+            "contract_document_file": file_url,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    updated = await db.employee_contracts.find_one(
+        {"id": contract_id, "employee_id": employee_uuid},
+        {"_id": 0}
+    )
+    
+    return ContractResponse(**updated)
+
+
+@router.delete("/{employee_uuid}/contracts/{contract_id}/document", response_model=ContractResponse)
+async def delete_contract_document(
+    employee_uuid: str,
+    contract_id: str,
+    token_data: dict = Depends(get_token_data)
+):
+    """Delete contract document"""
+    org_id = token_data.get("org_id")
+    await verify_employee_access(employee_uuid, org_id)
+    
+    contract = await db.employee_contracts.find_one(
+        {"id": contract_id, "employee_id": employee_uuid}
+    )
+    if not contract:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Contract not found"
+        )
+    
+    if contract.get("contract_document_file"):
+        filepath = CONTRACTS_DIR / contract["contract_document_file"].split("/")[-1]
+        if filepath.exists():
+            filepath.unlink()
+    
+    await db.employee_contracts.update_one(
+        {"id": contract_id, "employee_id": employee_uuid},
+        {"$set": {
+            "contract_document_file": None,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    updated = await db.employee_contracts.find_one(
+        {"id": contract_id, "employee_id": employee_uuid},
+        {"_id": 0}
+    )
+    
+    return ContractResponse(**updated)

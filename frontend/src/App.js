@@ -8,6 +8,10 @@ import Dashboard from './pages/Dashboard';
 import EmployeeList from './pages/EmployeeList';
 import EmployeeCreate from './pages/EmployeeCreate';
 import EmployeeDetail from './pages/EmployeeDetail';
+import ClientList from './pages/ClientList';
+import ClientDetail from './pages/ClientDetail';
+import SiteList from './pages/SiteList';
+import SiteDetail from './pages/SiteDetail';
 import { Toaster } from './components/ui/sonner';
 
 // Placeholder pages for navigation items
@@ -39,8 +43,10 @@ function App() {
             <Route path="/employees" element={<EmployeeList />} />
             <Route path="/employees/new" element={<EmployeeCreate />} />
             <Route path="/employees/:id" element={<EmployeeDetail />} />
-            <Route path="/clients" element={<PlaceholderPage title="Clients" />} />
-            <Route path="/sites" element={<PlaceholderPage title="Sites" />} />
+            <Route path="/clients" element={<ClientList />} />
+            <Route path="/clients/:id" element={<ClientDetail />} />
+            <Route path="/sites" element={<SiteList />} />
+            <Route path="/sites/:id" element={<SiteDetail />} />
             <Route path="/assets" element={<PlaceholderPage title="Assets" />} />
             <Route path="/payroll" element={<PlaceholderPage title="Payroll" />} />
             <Route path="/invoices" element={<PlaceholderPage title="Invoices" />} />
