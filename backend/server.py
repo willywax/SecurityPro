@@ -22,6 +22,7 @@ from routers import employees
 from routers import clients
 from routers import sites
 from routers import assets
+from routers import payrolls
 
 # Set database for routers
 auth.set_db(db)
@@ -29,6 +30,7 @@ employees.set_db(db)
 clients.set_db(db)
 sites.set_db(db)
 assets.set_db(db)
+payrolls.set_db(db)
 
 
 @asynccontextmanager
@@ -78,6 +80,7 @@ api_router.include_router(employees.router)
 api_router.include_router(clients.router)
 api_router.include_router(sites.router)
 api_router.include_router(assets.router)
+api_router.include_router(payrolls.router)
 
 # Include the router in the main app
 app.include_router(api_router)
