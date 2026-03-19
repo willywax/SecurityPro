@@ -34,52 +34,60 @@ Build a multi-tenant SaaS monorepo called "Security Operations SaaS" for securit
 - ✅ Protected routes
 - ✅ Database seeding (admin user + demo org)
 
-### Database Models Created
-1. organizations
-2. users
-3. roles
-4. employees
-5. employee_bank_accounts
-6. employee_referees
-7. employee_next_of_kin
-8. employee_contracts
-9. employee_documents
-10. clients
-11. sites
-12. assets
-13. asset_issuances
-14. payrolls
-15. payroll_items
-16. invoices
-17. invoice_items
-18. payments
-19. payment_allocations
-20. refresh_tokens
+### Phase 2 - HR Records Module (March 19, 2026)
+- ✅ Employee list page with search, filter by status, pagination
+- ✅ Mobile card layout for employee list
+- ✅ Employee create form with validation
+- ✅ Employee detail page with tab shell
+- ✅ Profile tab - full CRUD functionality
+- ✅ Profile photo upload/delete
+- ✅ Other tabs show "Coming soon" placeholder:
+  - Bank Details
+  - Referees
+  - Next of Kin
+  - Contracts
+  - Assets Issued
+  - Documents
 
-### API Endpoints
-- POST /api/auth/login
-- POST /api/auth/logout
-- POST /api/auth/refresh
-- GET /api/auth/me
-- POST /api/auth/forgot-password
-- GET /api/health
+### Employee Profile Fields
+- employee_id, guard_no, profile_photo
+- first_name, middle_name, last_name
+- gender, date_of_birth, marital_status
+- nationality, NIN
+- phone_1, phone_2, email
+- physical_address, postal_address
+- education_background, job_title
+- employment_status, hire_date, termination_date
+- notes
+
+### API Endpoints (New)
+- GET /api/employees - List with pagination, search, filter
+- POST /api/employees - Create employee
+- GET /api/employees/:id - Get single employee
+- PUT /api/employees/:id - Update employee
+- DELETE /api/employees/:id - Delete employee
+- POST /api/employees/:id/photo - Upload photo
+- DELETE /api/employees/:id/photo - Delete photo
 
 ## Prioritized Backlog
 
 ### P0 - Critical (Next Phase)
-- [ ] Employee CRUD operations
+- [ ] Bank Details tab implementation
+- [ ] Referees tab implementation
+- [ ] Next of Kin tab implementation
 - [ ] Client management
-- [ ] Site management
 
 ### P1 - High Priority
+- [ ] Contracts tab implementation
+- [ ] Documents tab with file uploads
+- [ ] Site management
 - [ ] Asset tracking & issuance
-- [ ] Basic payroll processing
-- [ ] Invoice generation
 
 ### P2 - Medium Priority
 - [ ] Shift scheduling
 - [ ] Attendance tracking
-- [ ] Document uploads
+- [ ] Basic payroll processing
+- [ ] Invoice generation
 
 ### P3 - Future Enhancements
 - [ ] Reports & analytics
@@ -99,7 +107,7 @@ Build a multi-tenant SaaS monorepo called "Security Operations SaaS" for securit
 - **Auth**: JWT access + refresh tokens
 
 ## Next Tasks
-1. Implement Employee CRUD endpoints
-2. Add Employee list/detail views in frontend
-3. Implement Client management
-4. Add Site management with client association
+1. Implement Bank Details tab CRUD
+2. Implement Referees tab CRUD
+3. Implement Next of Kin tab CRUD
+4. Add Client management module
