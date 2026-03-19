@@ -5,6 +5,9 @@ import DashboardLayout from './components/layout/DashboardLayout';
 import Login from './pages/Login';
 import ForgotPassword from './pages/ForgotPassword';
 import Dashboard from './pages/Dashboard';
+import EmployeeList from './pages/EmployeeList';
+import EmployeeCreate from './pages/EmployeeCreate';
+import EmployeeDetail from './pages/EmployeeDetail';
 import { Toaster } from './components/ui/sonner';
 
 // Placeholder pages for navigation items
@@ -33,7 +36,9 @@ function App() {
             }
           >
             <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/employees" element={<PlaceholderPage title="Employees" />} />
+            <Route path="/employees" element={<EmployeeList />} />
+            <Route path="/employees/new" element={<EmployeeCreate />} />
+            <Route path="/employees/:id" element={<EmployeeDetail />} />
             <Route path="/clients" element={<PlaceholderPage title="Clients" />} />
             <Route path="/sites" element={<PlaceholderPage title="Sites" />} />
             <Route path="/assets" element={<PlaceholderPage title="Assets" />} />

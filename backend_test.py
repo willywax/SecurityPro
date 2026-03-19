@@ -297,15 +297,292 @@ class SecurityOpsAPITester:
         self.access_token = temp_token
         return success
 
+    def test_employees_crud(self):
+        """Test Employee CRUD operations"""
+        self.log("\n👥 Testing Employee CRUD Operations")
+        
+        if not self.access_token:
+            self.log("❌ No access token available for employee tests")
+            return False
+        
+        # Test data for employee creation
+        test_employee_data = {
+            "employee_id": f"TEST{datetime.now().strftime('%H%M%S')}",
+            "first_name": "Test",
+            "last_name": "Employee", 
+            "email": "test.employee@securityops.com",
+            "phone_1": "+256700123456",
+            "job_title": "Security Guard",
+            "employment_status": "active",
+            "gender": "male",
+            "nationality": "Ugandan"
+        }
+        
+        created_employee_id = None
+        all_tests_passed = True
+        
+        # Test 1: Create Employee
+        success, response = self.run_test(
+            "Create Employee",
+            "POST", 
+            "/employees",
+            201,
+            data=test_employee_data
+        )
+        
+        if success and response:
+            created_employee_id = response.get('id')
+            if created_employee_id:
+                self.log(f"   Created employee ID: {created_employee_id}")
+            else:
+                self.log("   ❌ No employee ID in response")
+                all_tests_passed = False
+        else:
+            all_tests_passed = False
+        
+        # Test 2: Get Employee List 
+        success2, response2 = self.run_test(
+            "List Employees",
+            "GET",
+            "/employees?page=1&page_size=10", 
+            200
+        )
+        
+        if success2 and response2:
+            employees = response2.get('employees', [])
+            total = response2.get('total', 0)
+            self.log(f"   Found {len(employees)} employees (total: {total})")
+            
+            # Check if our created employee is in the list
+            if created_employee_id:
+                found = any(emp.get('id') == created_employee_id for emp in employees)
+                if found:
+                    self.log("   ✅ Created employee found in list")
+                else:
+                    self.log("   ⚠️  Created employee not found in list (might be pagination)")
+        else:
+            all_tests_passed = False
+        
+        # Test 3: Get Single Employee
+        if created_employee_id:
+            success3, response3 = self.run_test(
+                "Get Single Employee",
+                "GET",
+                f"/employees/{created_employee_id}",
+                200
+            )
+            
+            if success3 and response3:
+                emp_name = response3.get('full_name', 'Unknown')
+                emp_status = response3.get('employment_status', 'Unknown')
+                self.log(f"   Employee: {emp_name} ({emp_status})")
+            else:
+                all_tests_passed = False
+        
+        # Test 4: Update Employee  
+        if created_employee_id:
+            update_data = {
+                "job_title": "Senior Security Guard",
+                "employment_status": "active",
+                "notes": "Updated via API test"
+            }
+            
+            success4, response4 = self.run_test(
+                "Update Employee",
+                "PUT",
+                f"/employees/{created_employee_id}",
+                200,
+                data=update_data
+            )
+            
+            if success4 and response4:
+                updated_title = response4.get('job_title', '')
+                if updated_title == "Senior Security Guard":
+                    self.log("   ✅ Employee updated successfully") 
+                else:
+                    self.log(f"   ❌ Update failed - title: {updated_title}")
+                    all_tests_passed = False
+            else:
+                all_tests_passed = False
+        
+        # Test 5: Search Employees
+        success5, response5 = self.run_test(
+            "Search Employees",
+            "GET",
+            "/employees?search=Test&page=1&page_size=10",
+            200
+        )
+        
+        if success5 and response5:
+            search_results = response5.get('employees', [])
+            self.log(f"   Search results: {len(search_results)} employees found")
+            
+            # Check if our test employee is in search results
+            if created_employee_id:
+                found = any(emp.get('id') == created_employee_id for emp in search_results)
+                if found:
+                    self.log("   ✅ Search working correctly")
+                else:
+                    self.log("   ⚠️  Created employee not found in search results")
+        else:
+            all_tests_passed = False
+        
+        # Test 6: Filter by Status
+        success6, response6 = self.run_test(
+            "Filter by Status", 
+            "GET",
+            "/employees?status=active&page=1&page_size=10",
+            200
+        )
+        
+        if success6 and response6:
+            filtered_results = response6.get('employees', [])
+            self.log(f"   Filtered results: {len(filtered_results)} active employees")
+            
+            # Check all results are active
+            all_active = all(emp.get('employment_status') == 'active' for emp in filtered_results)
+            if all_active:
+                self.log("   ✅ Status filter working correctly")
+            else:
+                self.log("   ❌ Status filter not working - found non-active employees")
+                all_tests_passed = False
+        else:
+            all_tests_passed = False
+        
+        # Test 7: Delete Employee (cleanup)
+        if created_employee_id:
+            success7, response7 = self.run_test(
+                "Delete Employee",
+                "DELETE", 
+                f"/employees/{created_employee_id}",
+                200
+            )
+            
+            if success7 and response7:
+                message = response7.get('message', '')
+                if 'deleted' in message.lower():
+                    self.log("   ✅ Employee deleted successfully")
+                else:
+                    self.log(f"   ❌ Unexpected delete message: {message}")
+                    all_tests_passed = False
+            else:
+                all_tests_passed = False
+                
+            # Verify deletion
+            success8, _ = self.run_test(
+                "Verify Deletion",
+                "GET",
+                f"/employees/{created_employee_id}",
+                404
+            )
+            
+            if success8:
+                self.log("   ✅ Employee deletion verified")
+            else:
+                self.log("   ❌ Employee still exists after deletion")
+                all_tests_passed = False
+        
+        return all_tests_passed
+
+    def test_employee_validation(self):
+        """Test employee creation validation"""
+        self.log("\n🔍 Testing Employee Validation")
+        
+        if not self.access_token:
+            self.log("❌ No access token available for validation tests")
+            return False
+        
+        all_tests_passed = True
+        
+        # Test 1: Missing required fields
+        success1, _ = self.run_test(
+            "Create Employee - Missing Required Fields",
+            "POST",
+            "/employees",
+            422,  # Validation error
+            data={"email": "invalid@test.com"}
+        )
+        
+        if success1:
+            self.log("   ✅ Validation correctly rejects missing fields")
+        else:
+            all_tests_passed = False
+            
+        # Test 2: Invalid email format
+        success2, _ = self.run_test(
+            "Create Employee - Invalid Email",
+            "POST",
+            "/employees", 
+            422,
+            data={
+                "employee_id": "TESTINVALID",
+                "first_name": "Test",
+                "last_name": "Employee",
+                "email": "invalid-email-format"
+            }
+        )
+        
+        if success2:
+            self.log("   ✅ Validation correctly rejects invalid email")
+        else:
+            all_tests_passed = False
+        
+        # Test 3: Duplicate employee ID
+        # First create a valid employee
+        test_employee = {
+            "employee_id": "DUPLICATE_TEST",
+            "first_name": "First",
+            "last_name": "Employee",
+            "employment_status": "active"
+        }
+        
+        success3, response3 = self.run_test(
+            "Create Employee - Original",
+            "POST",
+            "/employees",
+            201,
+            data=test_employee
+        )
+        
+        if success3:
+            created_id = response3.get('id')
+            
+            # Try to create another with same employee_id
+            success4, _ = self.run_test(
+                "Create Employee - Duplicate ID",
+                "POST",
+                "/employees",
+                400,  # Bad request for duplicate
+                data=test_employee
+            )
+            
+            if success4:
+                self.log("   ✅ Validation correctly rejects duplicate employee ID")
+            else:
+                all_tests_passed = False
+            
+            # Cleanup - delete the test employee
+            if created_id:
+                self.run_test(
+                    "Cleanup Duplicate Test Employee",
+                    "DELETE",
+                    f"/employees/{created_id}",
+                    200
+                )
+        else:
+            all_tests_passed = False
+        
+        return all_tests_passed
+
     def run_all_tests(self):
         """Run all backend API tests"""
         self.log("=" * 60)
-        self.log("🚀 Starting Security Operations SaaS Backend Tests")
+        self.log("🚀 Starting Security Operations SaaS Backend Tests - HR Records Module")
         self.log("=" * 60)
         
         test_results = []
         
-        # Run tests in sequence
+        # Run auth tests first
         test_results.append(("Health Checks", self.test_health_check()))
         test_results.append(("Successful Login", self.test_login_success()))
         test_results.append(("Failed Login Cases", self.test_login_failure()))
@@ -313,6 +590,12 @@ class SecurityOpsAPITester:
         test_results.append(("Token Refresh", self.test_token_refresh()))
         test_results.append(("Forgot Password", self.test_forgot_password()))
         test_results.append(("Unauthorized Access", self.test_unauthorized_access()))
+        
+        # Run employee tests
+        test_results.append(("Employee CRUD Operations", self.test_employees_crud()))
+        test_results.append(("Employee Validation", self.test_employee_validation()))
+        
+        # Logout last
         test_results.append(("User Logout", self.test_logout()))
         
         # Print summary

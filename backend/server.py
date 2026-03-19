@@ -1,4 +1,5 @@
 from fastapi import FastAPI, APIRouter
+from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -17,9 +18,11 @@ db = client[os.environ['DB_NAME']]
 
 # Import routers
 from routers import auth
+from routers import employees
 
-# Set database for auth router
+# Set database for routers
 auth.set_db(db)
+employees.set_db(db)
 
 
 @asynccontextmanager
@@ -43,6 +46,12 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Mount static files for uploads
+uploads_dir = ROOT_DIR / "uploads"
+uploads_dir.mkdir(exist_ok=True)
+(uploads_dir / "photos").mkdir(exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(uploads_dir)), name="uploads")
+
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
@@ -57,8 +66,9 @@ async def health_check():
     return {"status": "healthy", "service": "security-ops-api"}
 
 
-# Include auth router
+# Include routers
 api_router.include_router(auth.router)
+api_router.include_router(employees.router)
 
 # Include the router in the main app
 app.include_router(api_router)
