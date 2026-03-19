@@ -1,36 +1,24 @@
-# Invoice Router - Full CRUD for Invoice management module
+# Invoice Router - Full CRUD for Invoice management module - Migrated to SQLAlchemy
 
 from fastapi import APIRouter, HTTPException, status, Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func, or_
+from sqlalchemy.orm import selectinload
 from pydantic import BaseModel, field_validator
 from typing import Optional, List
-from datetime import datetime, timezone
-from enum import Enum
+from datetime import datetime, date
+from uuid import UUID
 import uuid
 import re
 
+from db.dependencies import get_db
+from models.invoice import Invoice, InvoiceSite, InvoiceItem, Payment, PaymentAllocation
+from models.client import Client
+from models.site import Site
+from models.enums import InvoiceStatus, ItemType, PaymentStatus
 from utils.auth import get_token_data
 
 router = APIRouter(prefix="/invoices", tags=["Invoices"])
-
-db = None
-
-def set_db(database):
-    global db
-    db = database
-
-
-# ============ ENUMS ============
-
-class InvoiceStatus(str, Enum):
-    DRAFT = "draft"
-    SENT = "sent"
-    PAID = "paid"
-    OVERDUE = "overdue"
-
-
-class ItemType(str, Enum):
-    GUARD = "guard"
-    ASSET = "asset"
 
 
 # ============ SCHEMAS ============
@@ -43,15 +31,14 @@ class InvoiceItemCreate(BaseModel):
 
 
 class InvoiceSiteCreate(BaseModel):
-    site_id: str
-    site_name: str
+    site_id: UUID
     items: List[InvoiceItemCreate] = []
 
 
 class InvoiceCreate(BaseModel):
-    client_id: str
-    issue_date: str
-    due_date: str
+    client_id: UUID
+    issue_date: str  # YYYY-MM-DD format
+    due_date: str    # YYYY-MM-DD format
     status: InvoiceStatus = InvoiceStatus.DRAFT
     notes: Optional[str] = None
     sites: List[InvoiceSiteCreate] = []
@@ -84,54 +71,66 @@ class StatusUpdate(BaseModel):
 
 
 class InvoiceItemResponse(BaseModel):
-    id: str
-    invoice_site_id: str
-    item_type: str
+    id: UUID
+    invoice_site_id: UUID
+    item_type: ItemType
     description: str
     quantity: float
     rate: float
     amount: float
 
+    class Config:
+        from_attributes = True
+
 
 class InvoiceSiteResponse(BaseModel):
-    id: str
-    invoice_id: str
-    site_id: str
+    id: UUID
+    invoice_id: UUID
+    site_id: UUID
     site_name: str
     subtotal: float
     items: List[InvoiceItemResponse] = []
 
+    class Config:
+        from_attributes = True
+
 
 class InvoiceResponse(BaseModel):
-    id: str
-    org_id: str
+    id: UUID
+    org_id: UUID
     invoice_id: str
-    client_id: str
+    client_id: UUID
     client_name: Optional[str] = None
     client_address: Optional[str] = None
     client_email: Optional[str] = None
     issue_date: str
     due_date: str
-    status: str
+    status: InvoiceStatus
     notes: Optional[str] = None
     grand_total: float
     sites: List[InvoiceSiteResponse] = []
-    created_at: str
-    updated_at: str
-    created_by: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    created_by: Optional[UUID] = None
+
+    class Config:
+        from_attributes = True
 
 
 class InvoiceListItem(BaseModel):
-    id: str
-    org_id: str
+    id: UUID
+    org_id: UUID
     invoice_id: str
-    client_id: str
+    client_id: UUID
     client_name: Optional[str] = None
     issue_date: str
     due_date: str
-    status: str
+    status: InvoiceStatus
     grand_total: float
-    created_at: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
 
 
 class InvoiceListResponse(BaseModel):
@@ -146,256 +145,537 @@ class MessageResponse(BaseModel):
     message: str
 
 
+class PaymentCreate(BaseModel):
+    client_id: UUID
+    amount: float
+    payment_date: datetime
+    payment_method: str
+    reference_number: Optional[str] = None
+    notes: Optional[str] = None
+    invoice_allocations: List[dict] = []  # [{invoice_id: UUID, amount: float}]
+
+
+class PaymentResponse(BaseModel):
+    id: UUID
+    org_id: UUID
+    client_id: UUID
+    amount: float
+    payment_date: datetime
+    payment_method: str
+    reference_number: Optional[str] = None
+    status: PaymentStatus
+    notes: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 # ============ HELPERS ============
 
-async def generate_invoice_id(org_id: str) -> str:
-    cursor = db.invoices.find(
-        {"org_id": org_id, "invoice_id": {"$regex": "^INV"}},
-        {"invoice_id": 1, "_id": 0}
-    ).sort("invoice_id", -1).limit(1)
-    last = await cursor.to_list(length=1)
-    if last and last[0].get("invoice_id"):
+async def generate_invoice_id(db: AsyncSession, org_id: UUID) -> str:
+    """Generate auto-incrementing invoice ID like INV0001"""
+    result = await db.execute(
+        select(Invoice.invoice_id)
+        .where(Invoice.org_id == org_id)
+        .where(Invoice.invoice_id.like("INV%"))
+        .order_by(Invoice.invoice_id.desc())
+        .limit(1)
+    )
+    last_id = result.scalar_one_or_none()
+
+    if last_id:
         try:
-            num = int(last[0]["invoice_id"].replace("INV", ""))
+            num = int(last_id.replace("INV", ""))
             return f"INV{str(num + 1).zfill(4)}"
         except ValueError:
-            pass
+            return "INV0001"
     return "INV0001"
 
 
-async def enrich_invoice(doc: dict, org_id: str, include_sites: bool = True) -> dict:
-    enriched = {**doc}
-
-    client = await db.clients.find_one(
-        {"id": doc["client_id"], "org_id": org_id},
-        {"client_name": 1, "address": 1, "email": 1, "_id": 0}
-    )
-    enriched["client_name"] = client.get("client_name") if client else None
-    enriched["client_address"] = client.get("address") if client else None
-    enriched["client_email"] = client.get("email") if client else None
-
-    if include_sites:
-        sites = await db.invoice_sites.find(
-            {"invoice_id": doc["id"]}, {"_id": 0}
-        ).sort("created_at", 1).to_list(length=100)
-
-        enriched_sites = []
-        for site in sites:
-            items = await db.invoice_items.find(
-                {"invoice_site_id": site["id"]}, {"_id": 0}
-            ).sort("created_at", 1).to_list(length=200)
-            enriched_sites.append({**site, "items": items})
-        enriched["sites"] = enriched_sites
-
-    return enriched
-
-
-async def create_sites_and_items(invoice_id: str, org_id: str, sites_data: list) -> float:
+async def create_sites_and_items(
+    db: AsyncSession,
+    invoice_id: UUID,
+    org_id: UUID,
+    user_id: UUID,
+    sites_data: List[InvoiceSiteCreate]
+) -> float:
+    """Create invoice sites and items, return grand total"""
     grand_total = 0.0
-    now = datetime.now(timezone.utc).isoformat()
 
     for site_data in sites_data:
+        # Get site name
+        site_result = await db.execute(
+            select(Site).where(Site.id == site_data.site_id, Site.org_id == org_id)
+        )
+        site = site_result.scalar_one_or_none()
+
+        if not site:
+            raise HTTPException(status_code=404, detail=f"Site {site_data.site_id} not found")
+
         site_subtotal = 0.0
-        site_uuid = str(uuid.uuid4())
-        items_to_insert = []
 
-        for item in site_data.items:
-            amount = round(item.quantity * item.rate, 2)
+        # Create invoice site
+        new_site = InvoiceSite(
+            org_id=org_id,
+            invoice_id=invoice_id,
+            site_id=site_data.site_id,
+            site_name=site.site_name,
+            subtotal=0.0,  # Will update later
+            created_by=user_id
+        )
+        db.add(new_site)
+        await db.flush()  # Get the site ID
+
+        # Create items
+        for item_data in site_data.items:
+            amount = round(item_data.quantity * item_data.rate, 2)
             site_subtotal += amount
-            items_to_insert.append({
-                "id": str(uuid.uuid4()),
-                "invoice_site_id": site_uuid,
-                "invoice_id": invoice_id,
-                "org_id": org_id,
-                "item_type": item.item_type.value,
-                "description": item.description,
-                "quantity": item.quantity,
-                "rate": item.rate,
-                "amount": amount,
-                "created_at": now,
-            })
 
+            new_item = InvoiceItem(
+                org_id=org_id,
+                invoice_site_id=new_site.id,
+                invoice_id=invoice_id,
+                item_type=item_data.item_type,
+                description=item_data.description,
+                quantity=item_data.quantity,
+                rate=item_data.rate,
+                amount=amount,
+                created_by=user_id
+            )
+            db.add(new_item)
+
+        # Update site subtotal
         site_subtotal = round(site_subtotal, 2)
+        new_site.subtotal = site_subtotal
         grand_total += site_subtotal
-
-        await db.invoice_sites.insert_one({
-            "id": site_uuid,
-            "invoice_id": invoice_id,
-            "org_id": org_id,
-            "site_id": site_data.site_id,
-            "site_name": site_data.site_name,
-            "subtotal": site_subtotal,
-            "created_at": now,
-        })
-
-        if items_to_insert:
-            await db.invoice_items.insert_many(items_to_insert)
 
     return round(grand_total, 2)
 
 
-async def cascade_delete_invoice(invoice_id: str):
-    sites = await db.invoice_sites.find(
-        {"invoice_id": invoice_id}, {"id": 1, "_id": 0}
-    ).to_list(length=100)
-    site_ids = [s["id"] for s in sites]
-    if site_ids:
-        await db.invoice_items.delete_many({"invoice_site_id": {"$in": site_ids}})
-    await db.invoice_sites.delete_many({"invoice_id": invoice_id})
+async def cascade_delete_invoice_sites(db: AsyncSession, invoice_id: UUID):
+    """Delete all sites and items for an invoice"""
+    # Get all sites
+    result = await db.execute(
+        select(InvoiceSite).where(InvoiceSite.invoice_id == invoice_id)
+    )
+    sites = result.scalars().all()
+
+    # Delete items and sites
+    for site in sites:
+        # Delete items
+        items_result = await db.execute(
+            select(InvoiceItem).where(InvoiceItem.invoice_site_id == site.id)
+        )
+        items = items_result.scalars().all()
+        for item in items:
+            await db.delete(item)
+
+        # Delete site
+        await db.delete(site)
+
+
+async def enrich_invoice_with_client(
+    db: AsyncSession,
+    invoice: Invoice,
+    org_id: UUID
+) -> dict:
+    """Enrich invoice with client details"""
+    # Get client details
+    client_result = await db.execute(
+        select(Client).where(Client.id == invoice.client_id, Client.org_id == org_id)
+    )
+    client = client_result.scalar_one_or_none()
+
+    return {
+        "client_name": client.client_name if client else None,
+        "client_address": client.address if client else None,
+        "client_email": client.email if client else None
+    }
 
 
 # ============ ENDPOINTS ============
 
-@router.get("", response_model=InvoiceListResponse)
+@router.get("/", response_model=InvoiceListResponse)
 async def list_invoices(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
-    client_id: Optional[str] = Query(None),
-    status: Optional[InvoiceStatus] = Query(None),
+    client_id: Optional[UUID] = Query(None),
+    status_filter: Optional[InvoiceStatus] = Query(None),
     month: Optional[str] = Query(None, description="Filter by YYYY-MM"),
+    db: AsyncSession = Depends(get_db),
     token_data: dict = Depends(get_token_data)
 ):
-    org_id = token_data.get("org_id")
-    query = {"org_id": org_id}
+    """List all invoices with pagination and filters"""
+    org_id = UUID(token_data.get("org_id"))
+
+    # Base query
+    query = select(Invoice).where(Invoice.org_id == org_id)
+
+    # Apply filters
     if client_id:
-        query["client_id"] = client_id
-    if status:
-        query["status"] = status.value
+        query = query.where(Invoice.client_id == client_id)
+    if status_filter:
+        query = query.where(Invoice.status == status_filter)
     if month:
-        query["issue_date"] = {"$regex": f"^{month}"}
+        query = query.where(Invoice.issue_date.like(f"{month}%"))
 
-    total = await db.invoices.count_documents(query)
-    skip = (page - 1) * page_size
-    total_pages = (total + page_size - 1) // page_size if total > 0 else 1
+    # Count total
+    count_query = select(func.count()).select_from(query.subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar()
 
-    cursor = db.invoices.find(query, {"_id": 0}).sort(
-        [("issue_date", -1), ("created_at", -1)]
-    ).skip(skip).limit(page_size)
-    invoices = await cursor.to_list(length=page_size)
+    # Paginate
+    query = query.order_by(Invoice.issue_date.desc(), Invoice.created_at.desc())
+    query = query.offset((page - 1) * page_size).limit(page_size)
 
-    enriched = []
-    for inv in invoices:
-        enriched.append(InvoiceListItem(**(await enrich_invoice(inv, org_id, include_sites=False))))
+    result = await db.execute(query)
+    invoices = result.scalars().all()
+
+    # Enrich with client details
+    enriched_invoices = []
+    for invoice in invoices:
+        client_data = await enrich_invoice_with_client(db, invoice, org_id)
+        invoice_dict = {
+            "id": invoice.id,
+            "org_id": invoice.org_id,
+            "invoice_id": invoice.invoice_id,
+            "client_id": invoice.client_id,
+            "client_name": client_data["client_name"],
+            "issue_date": invoice.issue_date,
+            "due_date": invoice.due_date,
+            "status": invoice.status,
+            "grand_total": invoice.grand_total,
+            "created_at": invoice.created_at
+        }
+        enriched_invoices.append(InvoiceListItem(**invoice_dict))
 
     return InvoiceListResponse(
-        invoices=enriched, total=total, page=page, page_size=page_size, total_pages=total_pages
+        invoices=enriched_invoices,
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=(total + page_size - 1) // page_size
     )
 
 
-@router.post("", response_model=InvoiceResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=InvoiceResponse, status_code=status.HTTP_201_CREATED)
 async def create_invoice(
     data: InvoiceCreate,
+    db: AsyncSession = Depends(get_db),
     token_data: dict = Depends(get_token_data)
 ):
-    org_id = token_data.get("org_id")
-    user_id = token_data.get("sub")
+    """Create a new invoice with sites and items"""
+    org_id = UUID(token_data.get("org_id"))
+    user_id = UUID(token_data.get("sub"))
 
-    client = await db.clients.find_one({"id": data.client_id, "org_id": org_id})
-    if not client:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
-
-    invoice_id_str = await generate_invoice_id(org_id)
-    invoice_uuid = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
-
-    grand_total = await create_sites_and_items(invoice_uuid, org_id, data.sites)
-
-    invoice_doc = {
-        "id": invoice_uuid,
-        "org_id": org_id,
-        "invoice_id": invoice_id_str,
-        "client_id": data.client_id,
-        "issue_date": data.issue_date,
-        "due_date": data.due_date,
-        "status": data.status.value,
-        "notes": data.notes,
-        "grand_total": grand_total,
-        "created_at": now,
-        "updated_at": now,
-        "created_by": user_id,
-    }
-    await db.invoices.insert_one(invoice_doc)
-    return InvoiceResponse(**(await enrich_invoice(invoice_doc, org_id)))
-
-
-@router.get("/{invoice_uuid}", response_model=InvoiceResponse)
-async def get_invoice(
-    invoice_uuid: str,
-    token_data: dict = Depends(get_token_data)
-):
-    org_id = token_data.get("org_id")
-    invoice = await db.invoices.find_one({"id": invoice_uuid, "org_id": org_id}, {"_id": 0})
-    if not invoice:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invoice not found")
-    return InvoiceResponse(**(await enrich_invoice(invoice, org_id)))
-
-
-@router.put("/{invoice_uuid}", response_model=InvoiceResponse)
-async def update_invoice(
-    invoice_uuid: str,
-    data: InvoiceUpdate,
-    token_data: dict = Depends(get_token_data)
-):
-    org_id = token_data.get("org_id")
-    existing = await db.invoices.find_one({"id": invoice_uuid, "org_id": org_id}, {"_id": 0})
-    if not existing:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invoice not found")
-
-    now = datetime.now(timezone.utc).isoformat()
-    update_fields = {"updated_at": now}
-
-    update_dict = data.model_dump(exclude_unset=True)
-    for key in ("issue_date", "due_date", "notes"):
-        if key in update_dict and update_dict[key] is not None:
-            update_fields[key] = update_dict[key]
-    if "status" in update_dict and update_dict["status"] is not None:
-        update_fields["status"] = data.status.value
-
-    if data.sites is not None:
-        await cascade_delete_invoice(invoice_uuid)
-        grand_total = await create_sites_and_items(invoice_uuid, org_id, data.sites)
-        update_fields["grand_total"] = grand_total
-
-    await db.invoices.update_one({"id": invoice_uuid, "org_id": org_id}, {"$set": update_fields})
-    updated = await db.invoices.find_one({"id": invoice_uuid, "org_id": org_id}, {"_id": 0})
-    return InvoiceResponse(**(await enrich_invoice(updated, org_id)))
-
-
-@router.put("/{invoice_uuid}/status", response_model=InvoiceResponse)
-async def update_invoice_status(
-    invoice_uuid: str,
-    data: StatusUpdate,
-    token_data: dict = Depends(get_token_data)
-):
-    org_id = token_data.get("org_id")
-    existing = await db.invoices.find_one({"id": invoice_uuid, "org_id": org_id}, {"_id": 0})
-    if not existing:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invoice not found")
-
-    await db.invoices.update_one(
-        {"id": invoice_uuid, "org_id": org_id},
-        {"$set": {"status": data.status.value, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    # Verify client exists
+    client_result = await db.execute(
+        select(Client).where(Client.id == data.client_id, Client.org_id == org_id)
     )
-    updated = await db.invoices.find_one({"id": invoice_uuid, "org_id": org_id}, {"_id": 0})
-    return InvoiceResponse(**(await enrich_invoice(updated, org_id)))
+    client = client_result.scalar_one_or_none()
+
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    # Generate invoice ID
+    invoice_id_str = await generate_invoice_id(db, org_id)
+
+    # Create invoice (without grand_total first)
+    new_invoice = Invoice(
+        org_id=org_id,
+        invoice_id=invoice_id_str,
+        client_id=data.client_id,
+        issue_date=data.issue_date,
+        due_date=data.due_date,
+        status=data.status,
+        notes=data.notes,
+        grand_total=0.0,  # Will update after creating sites
+        created_by=user_id
+    )
+
+    db.add(new_invoice)
+    await db.flush()  # Get the invoice ID
+
+    # Create sites and items, get grand total
+    grand_total = await create_sites_and_items(
+        db, new_invoice.id, org_id, user_id, data.sites
+    )
+
+    # Update invoice grand total
+    new_invoice.grand_total = grand_total
+
+    await db.commit()
+    await db.refresh(new_invoice)
+
+    # Load with relationships
+    result = await db.execute(
+        select(Invoice)
+        .options(
+            selectinload(Invoice.sites).selectinload(InvoiceSite.items)
+        )
+        .where(Invoice.id == new_invoice.id)
+    )
+    invoice = result.scalar_one()
+
+    # Enrich with client details
+    client_data = await enrich_invoice_with_client(db, invoice, org_id)
+
+    response_dict = {
+        **InvoiceResponse.model_validate(invoice).model_dump(),
+        **client_data
+    }
+
+    return InvoiceResponse(**response_dict)
 
 
-@router.delete("/{invoice_uuid}", response_model=MessageResponse)
-async def delete_invoice(
-    invoice_uuid: str,
+@router.get("/{invoice_id}", response_model=InvoiceResponse)
+async def get_invoice(
+    invoice_id: UUID,
+    db: AsyncSession = Depends(get_db),
     token_data: dict = Depends(get_token_data)
 ):
-    org_id = token_data.get("org_id")
-    existing = await db.invoices.find_one({"id": invoice_uuid, "org_id": org_id}, {"_id": 0})
-    if not existing:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invoice not found")
+    """Get a single invoice by ID"""
+    org_id = UUID(token_data.get("org_id"))
 
-    if existing.get("status") != "draft":
+    result = await db.execute(
+        select(Invoice)
+        .options(
+            selectinload(Invoice.sites).selectinload(InvoiceSite.items)
+        )
+        .where(Invoice.id == invoice_id, Invoice.org_id == org_id)
+    )
+    invoice = result.scalar_one_or_none()
+
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    # Enrich with client details
+    client_data = await enrich_invoice_with_client(db, invoice, org_id)
+
+    response_dict = {
+        **InvoiceResponse.model_validate(invoice).model_dump(),
+        **client_data
+    }
+
+    return InvoiceResponse(**response_dict)
+
+
+@router.put("/{invoice_id}", response_model=InvoiceResponse)
+async def update_invoice(
+    invoice_id: UUID,
+    data: InvoiceUpdate,
+    db: AsyncSession = Depends(get_db),
+    token_data: dict = Depends(get_token_data)
+):
+    """Update an invoice"""
+    org_id = UUID(token_data.get("org_id"))
+    user_id = UUID(token_data.get("sub"))
+
+    # Get existing invoice
+    result = await db.execute(
+        select(Invoice).where(Invoice.id == invoice_id, Invoice.org_id == org_id)
+    )
+    invoice = result.scalar_one_or_none()
+
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    # Update basic fields
+    update_data = data.model_dump(exclude_unset=True, exclude={'sites'})
+    for field, value in update_data.items():
+        if value is not None:
+            setattr(invoice, field, value)
+
+    # If sites are being updated, delete old ones and create new
+    if data.sites is not None:
+        await cascade_delete_invoice_sites(db, invoice_id)
+        grand_total = await create_sites_and_items(
+            db, invoice_id, org_id, user_id, data.sites
+        )
+        invoice.grand_total = grand_total
+
+    await db.commit()
+    await db.refresh(invoice)
+
+    # Load with relationships
+    result = await db.execute(
+        select(Invoice)
+        .options(
+            selectinload(Invoice.sites).selectinload(InvoiceSite.items)
+        )
+        .where(Invoice.id == invoice_id)
+    )
+    invoice = result.scalar_one()
+
+    # Enrich with client details
+    client_data = await enrich_invoice_with_client(db, invoice, org_id)
+
+    response_dict = {
+        **InvoiceResponse.model_validate(invoice).model_dump(),
+        **client_data
+    }
+
+    return InvoiceResponse(**response_dict)
+
+
+@router.put("/{invoice_id}/status", response_model=InvoiceResponse)
+async def update_invoice_status(
+    invoice_id: UUID,
+    data: StatusUpdate,
+    db: AsyncSession = Depends(get_db),
+    token_data: dict = Depends(get_token_data)
+):
+    """Update invoice status"""
+    org_id = UUID(token_data.get("org_id"))
+
+    result = await db.execute(
+        select(Invoice).where(Invoice.id == invoice_id, Invoice.org_id == org_id)
+    )
+    invoice = result.scalar_one_or_none()
+
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    # Update status
+    invoice.status = data.status
+
+    await db.commit()
+    await db.refresh(invoice)
+
+    # Load with relationships
+    result = await db.execute(
+        select(Invoice)
+        .options(
+            selectinload(Invoice.sites).selectinload(InvoiceSite.items)
+        )
+        .where(Invoice.id == invoice_id)
+    )
+    invoice = result.scalar_one()
+
+    # Enrich with client details
+    client_data = await enrich_invoice_with_client(db, invoice, org_id)
+
+    response_dict = {
+        **InvoiceResponse.model_validate(invoice).model_dump(),
+        **client_data
+    }
+
+    return InvoiceResponse(**response_dict)
+
+
+@router.delete("/{invoice_id}", response_model=MessageResponse)
+async def delete_invoice(
+    invoice_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    token_data: dict = Depends(get_token_data)
+):
+    """Delete an invoice (only draft invoices can be deleted)"""
+    org_id = UUID(token_data.get("org_id"))
+
+    result = await db.execute(
+        select(Invoice).where(Invoice.id == invoice_id, Invoice.org_id == org_id)
+    )
+    invoice = result.scalar_one_or_none()
+
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    if invoice.status != InvoiceStatus.DRAFT:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=400,
             detail="Only draft invoices can be deleted"
         )
 
-    await cascade_delete_invoice(invoice_uuid)
-    await db.invoices.delete_one({"id": invoice_uuid, "org_id": org_id})
-    return MessageResponse(message="Invoice deleted")
+    # Cascade delete sites and items
+    await cascade_delete_invoice_sites(db, invoice_id)
+
+    # Delete invoice
+    await db.delete(invoice)
+    await db.commit()
+
+    return MessageResponse(message="Invoice deleted successfully")
+
+
+# ============ PAYMENT ENDPOINTS ============
+
+@router.post("/payments", response_model=PaymentResponse, status_code=status.HTTP_201_CREATED)
+async def create_payment(
+    data: PaymentCreate,
+    db: AsyncSession = Depends(get_db),
+    token_data: dict = Depends(get_token_data)
+):
+    """Create a payment and allocate to invoices"""
+    org_id = UUID(token_data.get("org_id"))
+    user_id = UUID(token_data.get("sub"))
+
+    # Verify client exists
+    client_result = await db.execute(
+        select(Client).where(Client.id == data.client_id, Client.org_id == org_id)
+    )
+    if not client_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    # Create payment
+    new_payment = Payment(
+        org_id=org_id,
+        client_id=data.client_id,
+        amount=data.amount,
+        payment_date=data.payment_date,
+        payment_method=data.payment_method,
+        reference_number=data.reference_number,
+        status=PaymentStatus.COMPLETED,
+        notes=data.notes,
+        created_by=user_id
+    )
+
+    db.add(new_payment)
+    await db.flush()
+
+    # Create allocations
+    for allocation in data.invoice_allocations:
+        invoice_id = UUID(allocation["invoice_id"])
+        amount = float(allocation["amount"])
+
+        # Verify invoice exists
+        inv_result = await db.execute(
+            select(Invoice).where(Invoice.id == invoice_id, Invoice.org_id == org_id)
+        )
+        if not inv_result.scalar_one_or_none():
+            raise HTTPException(status_code=404, detail=f"Invoice {invoice_id} not found")
+
+        new_allocation = PaymentAllocation(
+            org_id=org_id,
+            payment_id=new_payment.id,
+            invoice_id=invoice_id,
+            amount=amount,
+            created_by=user_id
+        )
+        db.add(new_allocation)
+
+    await db.commit()
+    await db.refresh(new_payment)
+
+    return new_payment
+
+
+@router.get("/payments", response_model=List[PaymentResponse])
+async def list_payments(
+    client_id: Optional[UUID] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    token_data: dict = Depends(get_token_data)
+):
+    """List all payments"""
+    org_id = UUID(token_data.get("org_id"))
+
+    query = select(Payment).where(Payment.org_id == org_id)
+
+    if client_id:
+        query = query.where(Payment.client_id == client_id)
+
+    query = query.order_by(Payment.payment_date.desc())
+
+    result = await db.execute(query)
+    payments = result.scalars().all()
+
+    return payments

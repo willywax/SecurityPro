@@ -1,48 +1,22 @@
-# Asset Router - CRUD for asset management + issuance tracking
+# Asset Router - CRUD for asset management + issuance tracking - Migrated to SQLAlchemy
 
 from fastapi import APIRouter, HTTPException, status, Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
 from pydantic import BaseModel, model_validator
 from typing import Optional, List
-from datetime import datetime, timezone, date
-from enum import Enum
+from datetime import datetime, date
+from uuid import UUID
 import uuid
 
+from db.dependencies import get_db
+from models.asset import Asset, AssetIssuance
+from models.employee import Employee
+from models.site import Site
+from models.enums import AssetType, AssetStatus, AssetCondition
 from utils.auth import get_token_data
 
 router = APIRouter(prefix="/assets", tags=["Assets"])
-
-db = None
-
-def set_db(database):
-    global db
-    db = database
-
-
-# ============ ENUMS ============
-
-class AssetType(str, Enum):
-    GUN = "gun"
-    UNIFORM = "uniform"
-    RADIO = "radio"
-    BATON = "baton"
-    HANDCUFF = "handcuff"
-    TORCH = "torch"
-    OTHER = "other"
-
-
-class AssetStatus(str, Enum):
-    AVAILABLE = "available"
-    ISSUED = "issued"
-    LOST = "lost"
-    MAINTENANCE = "maintenance"
-    RETIRED = "retired"
-
-
-class AssetCondition(str, Enum):
-    NEW = "new"
-    GOOD = "good"
-    FAIR = "fair"
-    POOR = "poor"
 
 
 # ============ ASSET SCHEMAS ============
@@ -70,20 +44,23 @@ class AssetUpdate(BaseModel):
 
 
 class AssetResponse(BaseModel):
-    id: str
-    org_id: str
+    id: UUID
+    org_id: UUID
     asset_id: str
     asset_tag: Optional[str] = None
-    asset_type: str
+    asset_type: AssetType
     name: str
     serial_number: Optional[str] = None
-    status: str
-    condition: str
-    purchase_date: Optional[str] = None
+    status: AssetStatus
+    condition: AssetCondition
+    purchase_date: Optional[date] = None
     notes: Optional[str] = None
-    created_at: str
-    updated_at: str
-    created_by: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    created_by: Optional[UUID] = None
+
+    class Config:
+        from_attributes = True
 
 
 class AssetListResponse(BaseModel):
@@ -97,8 +74,8 @@ class AssetListResponse(BaseModel):
 # ============ ISSUANCE SCHEMAS ============
 
 class IssuanceCreate(BaseModel):
-    issued_to_employee: Optional[str] = None
-    issued_to_site: Optional[str] = None
+    issued_to_employee: Optional[UUID] = None
+    issued_to_site: Optional[UUID] = None
     issue_date: date
     issue_condition: AssetCondition
     remarks: Optional[str] = None
@@ -118,23 +95,26 @@ class IssuanceReturn(BaseModel):
 
 
 class IssuanceResponse(BaseModel):
-    id: str
-    org_id: str
-    asset_id: str
-    issued_to_employee: Optional[str] = None
-    issued_to_site: Optional[str] = None
+    id: UUID
+    org_id: UUID
+    asset_id: UUID
+    issued_to_employee: Optional[UUID] = None
+    issued_to_site: Optional[UUID] = None
     employee_name: Optional[str] = None
     site_name: Optional[str] = None
-    issue_date: str
-    return_date: Optional[str] = None
-    issue_condition: str
-    return_condition: Optional[str] = None
+    issue_date: date
+    return_date: Optional[date] = None
+    issue_condition: AssetCondition
+    return_condition: Optional[AssetCondition] = None
     lost: bool
     remarks: Optional[str] = None
-    created_at: str
-    updated_at: str
-    created_by: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    created_by: Optional[UUID] = None
     is_active: bool = False
+
+    class Config:
+        from_attributes = True
 
 
 class MessageResponse(BaseModel):
@@ -143,373 +123,348 @@ class MessageResponse(BaseModel):
 
 # ============ HELPERS ============
 
-async def generate_asset_id(org_id: str) -> str:
+async def generate_asset_id(db: AsyncSession, org_id: UUID) -> str:
     """Generate auto-incrementing asset ID like ASSET0001"""
-    cursor = db.assets.find(
-        {"org_id": org_id, "asset_id": {"$regex": "^ASSET"}},
-        {"asset_id": 1, "_id": 0}
-    ).sort("asset_id", -1).limit(1)
+    result = await db.execute(
+        select(Asset.asset_id)
+        .where(Asset.org_id == org_id)
+        .where(Asset.asset_id.like("ASSET%"))
+        .order_by(Asset.asset_id.desc())
+        .limit(1)
+    )
+    last_id = result.scalar_one_or_none()
 
-    last = await cursor.to_list(length=1)
-
-    if last and last[0].get("asset_id"):
+    if last_id:
         try:
-            num = int(last[0]["asset_id"].replace("ASSET", ""))
+            num = int(last_id.replace("ASSET", ""))
             return f"ASSET{str(num + 1).zfill(4)}"
         except ValueError:
-            pass
-
+            return "ASSET0001"
     return "ASSET0001"
 
 
-async def enrich_issuance(doc: dict, org_id: str) -> dict:
-    """Add employee_name and site_name to an issuance document"""
-    enriched = {**doc}
+# ============ ASSET CRUD ENDPOINTS ============
 
-    if doc.get("issued_to_employee"):
-        emp = await db.employees.find_one(
-            {"id": doc["issued_to_employee"], "org_id": org_id},
-            {"first_name": 1, "last_name": 1, "employee_id": 1, "_id": 0}
-        )
-        if emp:
-            enriched["employee_name"] = f"{emp.get('first_name', '')} {emp.get('last_name', '')}".strip()
-
-    if doc.get("issued_to_site"):
-        site = await db.sites.find_one(
-            {"id": doc["issued_to_site"], "org_id": org_id},
-            {"site_name": 1, "_id": 0}
-        )
-        if site:
-            enriched["site_name"] = site.get("site_name")
-
-    # is_active: no return date set yet
-    enriched["is_active"] = not doc.get("return_date")
-
-    return enriched
-
-
-# ============ ASSET ENDPOINTS ============
-
-@router.get("", response_model=AssetListResponse)
-async def list_assets(
-    page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=1, le=100),
-    search: Optional[str] = Query(None),
-    asset_type: Optional[AssetType] = Query(None, alias="type"),
-    asset_status: Optional[AssetStatus] = Query(None, alias="status"),
+@router.post("/", response_model=AssetResponse, status_code=status.HTTP_201_CREATED)
+async def create_asset(
+    asset: AssetCreate,
+    db: AsyncSession = Depends(get_db),
     token_data: dict = Depends(get_token_data)
 ):
-    """List all assets with pagination, search, and filtering"""
-    org_id = token_data.get("org_id")
+    """Create a new asset"""
+    org_id = UUID(token_data.get("org_id"))
+    user_id = UUID(token_data.get("sub"))
 
-    query = {"org_id": org_id}
+    # Generate asset ID
+    asset_id = await generate_asset_id(db, org_id)
 
-    if asset_type:
-        query["asset_type"] = asset_type.value
+    # Create asset
+    new_asset = Asset(
+        org_id=org_id,
+        asset_id=asset_id,
+        created_by=user_id,
+        **asset.model_dump()
+    )
 
-    if asset_status:
-        query["status"] = asset_status.value
+    db.add(new_asset)
+    await db.commit()
+    await db.refresh(new_asset)
 
+    return new_asset
+
+
+@router.get("/", response_model=AssetListResponse)
+async def get_assets(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=100),
+    search: Optional[str] = None,
+    asset_type: Optional[AssetType] = None,
+    status_filter: Optional[AssetStatus] = None,
+    db: AsyncSession = Depends(get_db),
+    token_data: dict = Depends(get_token_data)
+):
+    """Get all assets with pagination and filters"""
+    org_id = UUID(token_data.get("org_id"))
+
+    # Base query
+    query = select(Asset).where(Asset.org_id == org_id)
+
+    # Apply filters
     if search:
-        search_regex = {"$regex": search, "$options": "i"}
-        query["$or"] = [
-            {"name": search_regex},
-            {"serial_number": search_regex},
-            {"asset_id": search_regex},
-            {"asset_tag": search_regex},
-        ]
+        query = query.where(
+            (Asset.name.ilike(f"%{search}%")) |
+            (Asset.asset_id.ilike(f"%{search}%")) |
+            (Asset.asset_tag.ilike(f"%{search}%"))
+        )
+    if asset_type:
+        query = query.where(Asset.asset_type == asset_type)
+    if status_filter:
+        query = query.where(Asset.status == status_filter)
 
-    total = await db.assets.count_documents(query)
-    skip = (page - 1) * page_size
-    total_pages = (total + page_size - 1) // page_size if total > 0 else 1
+    # Count total
+    count_query = select(func.count()).select_from(query.subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar()
 
-    cursor = db.assets.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(page_size)
-    assets = await cursor.to_list(length=page_size)
+    # Paginate
+    query = query.order_by(Asset.created_at.desc())
+    query = query.offset((page - 1) * page_size).limit(page_size)
+
+    result = await db.execute(query)
+    assets = result.scalars().all()
 
     return AssetListResponse(
-        assets=[AssetResponse(**a) for a in assets],
+        assets=assets,
         total=total,
         page=page,
         page_size=page_size,
-        total_pages=total_pages
+        total_pages=(total + page_size - 1) // page_size
     )
 
 
-@router.post("", response_model=AssetResponse, status_code=status.HTTP_201_CREATED)
-async def create_asset(
-    data: AssetCreate,
-    token_data: dict = Depends(get_token_data)
-):
-    """Create a new asset with auto-generated asset_id"""
-    org_id = token_data.get("org_id")
-    user_id = token_data.get("sub")
-
-    asset_id = await generate_asset_id(org_id)
-    now = datetime.now(timezone.utc).isoformat()
-
-    asset_doc = {
-        "id": str(uuid.uuid4()),
-        "org_id": org_id,
-        "asset_id": asset_id,
-        "asset_tag": data.asset_tag,
-        "asset_type": data.asset_type.value,
-        "name": data.name,
-        "serial_number": data.serial_number,
-        "status": data.status.value,
-        "condition": data.condition.value,
-        "purchase_date": data.purchase_date.isoformat() if data.purchase_date else None,
-        "notes": data.notes,
-        "created_at": now,
-        "updated_at": now,
-        "created_by": user_id
-    }
-
-    await db.assets.insert_one(asset_doc)
-    return AssetResponse(**asset_doc)
-
-
-@router.get("/{asset_uuid}", response_model=AssetResponse)
+@router.get("/{asset_id}", response_model=AssetResponse)
 async def get_asset(
-    asset_uuid: str,
+    asset_id: UUID,
+    db: AsyncSession = Depends(get_db),
     token_data: dict = Depends(get_token_data)
 ):
-    """Get a single asset by UUID"""
-    org_id = token_data.get("org_id")
+    """Get a single asset by ID"""
+    org_id = UUID(token_data.get("org_id"))
 
-    asset = await db.assets.find_one(
-        {"id": asset_uuid, "org_id": org_id},
-        {"_id": 0}
+    result = await db.execute(
+        select(Asset).where(Asset.id == asset_id, Asset.org_id == org_id)
     )
+    asset = result.scalar_one_or_none()
 
     if not asset:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
+        raise HTTPException(status_code=404, detail="Asset not found")
 
-    return AssetResponse(**asset)
+    return asset
 
 
-@router.put("/{asset_uuid}", response_model=AssetResponse)
+@router.put("/{asset_id}", response_model=AssetResponse)
 async def update_asset(
-    asset_uuid: str,
-    data: AssetUpdate,
+    asset_id: UUID,
+    asset_update: AssetUpdate,
+    db: AsyncSession = Depends(get_db),
     token_data: dict = Depends(get_token_data)
 ):
     """Update an asset"""
-    org_id = token_data.get("org_id")
+    org_id = UUID(token_data.get("org_id"))
 
-    existing = await db.assets.find_one(
-        {"id": asset_uuid, "org_id": org_id},
-        {"_id": 0}
+    result = await db.execute(
+        select(Asset).where(Asset.id == asset_id, Asset.org_id == org_id)
     )
+    asset = result.scalar_one_or_none()
 
-    if not existing:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
+    if not asset:
+        raise HTTPException(status_code=404, detail="Asset not found")
 
-    update_doc = {"updated_at": datetime.now(timezone.utc).isoformat()}
-    update_dict = data.model_dump(exclude_unset=True)
-    for key, value in update_dict.items():
-        if value is not None:
-            if key in ["asset_type", "status", "condition"] and hasattr(value, "value"):
-                update_doc[key] = value.value
-            elif key == "purchase_date" and isinstance(value, date):
-                update_doc[key] = value.isoformat()
-            else:
-                update_doc[key] = value
+    # Update fields
+    update_data = asset_update.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(asset, field, value)
 
-    await db.assets.update_one(
-        {"id": asset_uuid, "org_id": org_id},
-        {"$set": update_doc}
-    )
+    await db.commit()
+    await db.refresh(asset)
 
-    updated = await db.assets.find_one(
-        {"id": asset_uuid, "org_id": org_id},
-        {"_id": 0}
-    )
-
-    return AssetResponse(**updated)
+    return asset
 
 
-@router.delete("/{asset_uuid}", response_model=MessageResponse)
+@router.delete("/{asset_id}", response_model=MessageResponse)
 async def delete_asset(
-    asset_uuid: str,
+    asset_id: UUID,
+    db: AsyncSession = Depends(get_db),
     token_data: dict = Depends(get_token_data)
 ):
-    """Delete an asset - only if not currently issued"""
-    org_id = token_data.get("org_id")
+    """Delete an asset"""
+    org_id = UUID(token_data.get("org_id"))
 
-    active_issuance = await db.asset_issuances.find_one({
-        "asset_id": asset_uuid,
-        "org_id": org_id,
-        "return_date": None
-    })
-    if active_issuance:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot delete an asset that is currently issued"
-        )
+    result = await db.execute(
+        select(Asset).where(Asset.id == asset_id, Asset.org_id == org_id)
+    )
+    asset = result.scalar_one_or_none()
 
-    result = await db.assets.delete_one({"id": asset_uuid, "org_id": org_id})
+    if not asset:
+        raise HTTPException(status_code=404, detail="Asset not found")
 
-    if result.deleted_count == 0:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
+    await db.delete(asset)
+    await db.commit()
 
     return MessageResponse(message="Asset deleted successfully")
 
 
 # ============ ISSUANCE ENDPOINTS ============
 
-@router.get("/{asset_uuid}/issuances", response_model=List[IssuanceResponse])
-async def list_issuances(
-    asset_uuid: str,
-    token_data: dict = Depends(get_token_data)
-):
-    """List all issuances for an asset"""
-    org_id = token_data.get("org_id")
-
-    asset = await db.assets.find_one({"id": asset_uuid, "org_id": org_id})
-    if not asset:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
-
-    cursor = db.asset_issuances.find(
-        {"asset_id": asset_uuid, "org_id": org_id},
-        {"_id": 0}
-    ).sort("created_at", -1)
-
-    issuances = await cursor.to_list(length=100)
-
-    enriched = []
-    for iso in issuances:
-        enriched.append(IssuanceResponse(**(await enrich_issuance(iso, org_id))))
-
-    return enriched
-
-
-@router.post("/{asset_uuid}/issue", response_model=IssuanceResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/{asset_id}/issue", response_model=IssuanceResponse, status_code=status.HTTP_201_CREATED)
 async def issue_asset(
-    asset_uuid: str,
-    data: IssuanceCreate,
+    asset_id: UUID,
+    issuance: IssuanceCreate,
+    db: AsyncSession = Depends(get_db),
     token_data: dict = Depends(get_token_data)
 ):
     """Issue an asset to an employee or site"""
-    org_id = token_data.get("org_id")
-    user_id = token_data.get("sub")
+    org_id = UUID(token_data.get("org_id"))
+    user_id = UUID(token_data.get("sub"))
 
-    # Verify asset exists and is available
-    asset = await db.assets.find_one(
-        {"id": asset_uuid, "org_id": org_id},
-        {"_id": 0}
+    # Get asset
+    asset_result = await db.execute(
+        select(Asset).where(Asset.id == asset_id, Asset.org_id == org_id)
     )
+    asset = asset_result.scalar_one_or_none()
+
     if not asset:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
+        raise HTTPException(status_code=404, detail="Asset not found")
 
-    if asset.get("status") != "available":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Asset cannot be issued. Current status: {asset.get('status')}"
+    if asset.status != AssetStatus.AVAILABLE:
+        raise HTTPException(status_code=400, detail="Asset is not available for issuance")
+
+    # Verify recipient exists
+    if issuance.issued_to_employee:
+        emp_result = await db.execute(
+            select(Employee).where(Employee.id == issuance.issued_to_employee, Employee.org_id == org_id)
         )
+        if not emp_result.scalar_one_or_none():
+            raise HTTPException(status_code=404, detail="Employee not found")
 
-    # Confirm no active issuance exists
-    active = await db.asset_issuances.find_one({
-        "asset_id": asset_uuid,
-        "org_id": org_id,
-        "return_date": None
-    })
-    if active:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Asset already has an active issuance"
+    if issuance.issued_to_site:
+        site_result = await db.execute(
+            select(Site).where(Site.id == issuance.issued_to_site, Site.org_id == org_id)
         )
+        if not site_result.scalar_one_or_none():
+            raise HTTPException(status_code=404, detail="Site not found")
 
-    # Validate employee if provided
-    if data.issued_to_employee:
-        emp = await db.employees.find_one({"id": data.issued_to_employee, "org_id": org_id})
-        if not emp:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found")
-
-    # Validate site if provided
-    if data.issued_to_site:
-        site = await db.sites.find_one({"id": data.issued_to_site, "org_id": org_id})
-        if not site:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
-
-    now = datetime.now(timezone.utc).isoformat()
-    issuance_doc = {
-        "id": str(uuid.uuid4()),
-        "org_id": org_id,
-        "asset_id": asset_uuid,
-        "issued_to_employee": data.issued_to_employee,
-        "issued_to_site": data.issued_to_site,
-        "issue_date": data.issue_date.isoformat(),
-        "return_date": None,
-        "issue_condition": data.issue_condition.value,
-        "return_condition": None,
-        "lost": False,
-        "remarks": data.remarks,
-        "created_at": now,
-        "updated_at": now,
-        "created_by": user_id
-    }
-
-    await db.asset_issuances.insert_one(issuance_doc)
-
-    # Update asset status to issued
-    await db.assets.update_one(
-        {"id": asset_uuid, "org_id": org_id},
-        {"$set": {"status": "issued", "updated_at": now}}
+    # Create issuance
+    new_issuance = AssetIssuance(
+        org_id=org_id,
+        asset_id=asset_id,
+        created_by=user_id,
+        **issuance.model_dump()
     )
 
-    return IssuanceResponse(**(await enrich_issuance(issuance_doc, org_id)))
-
-
-@router.put("/{asset_uuid}/issuances/{issuance_id}/return", response_model=IssuanceResponse)
-async def return_asset(
-    asset_uuid: str,
-    issuance_id: str,
-    data: IssuanceReturn,
-    token_data: dict = Depends(get_token_data)
-):
-    """Return an issued asset (or declare as lost)"""
-    org_id = token_data.get("org_id")
-
-    issuance = await db.asset_issuances.find_one(
-        {"id": issuance_id, "asset_id": asset_uuid, "org_id": org_id},
-        {"_id": 0}
-    )
-
-    if not issuance:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Issuance not found")
-
-    if issuance.get("return_date"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Asset has already been returned"
-        )
-
-    now = datetime.now(timezone.utc).isoformat()
-    update_doc = {
-        "return_date": data.return_date.isoformat(),
-        "lost": data.lost,
-        "updated_at": now
-    }
-    if data.return_condition:
-        update_doc["return_condition"] = data.return_condition.value
-    if data.remarks is not None:
-        update_doc["remarks"] = data.remarks
-
-    await db.asset_issuances.update_one(
-        {"id": issuance_id, "org_id": org_id},
-        {"$set": update_doc}
-    )
+    db.add(new_issuance)
 
     # Update asset status
-    new_status = "lost" if data.lost else "available"
-    await db.assets.update_one(
-        {"id": asset_uuid, "org_id": org_id},
-        {"$set": {"status": new_status, "updated_at": now}}
-    )
+    asset.status = AssetStatus.ISSUED
 
-    updated = await db.asset_issuances.find_one(
-        {"id": issuance_id, "org_id": org_id},
-        {"_id": 0}
-    )
+    await db.commit()
+    await db.refresh(new_issuance)
 
-    return IssuanceResponse(**(await enrich_issuance(updated, org_id)))
+    # Build response
+    response_data = IssuanceResponse.model_validate(new_issuance)
+    response_data.is_active = new_issuance.return_date is None
+
+    # Get names
+    if new_issuance.issued_to_employee:
+        emp_result = await db.execute(
+            select(Employee).where(Employee.id == new_issuance.issued_to_employee)
+        )
+        emp = emp_result.scalar_one_or_none()
+        if emp:
+            response_data.employee_name = f"{emp.first_name} {emp.last_name}"
+
+    if new_issuance.issued_to_site:
+        site_result = await db.execute(
+            select(Site).where(Site.id == new_issuance.issued_to_site)
+        )
+        site = site_result.scalar_one_or_none()
+        if site:
+            response_data.site_name = site.site_name
+
+    return response_data
+
+
+@router.put("/issuances/{issuance_id}/return", response_model=IssuanceResponse)
+async def return_asset(
+    issuance_id: UUID,
+    return_data: IssuanceReturn,
+    db: AsyncSession = Depends(get_db),
+    token_data: dict = Depends(get_token_data)
+):
+    """Record asset return"""
+    org_id = UUID(token_data.get("org_id"))
+
+    # Get issuance
+    result = await db.execute(
+        select(AssetIssuance).where(AssetIssuance.id == issuance_id, AssetIssuance.org_id == org_id)
+    )
+    issuance = result.scalar_one_or_none()
+
+    if not issuance:
+        raise HTTPException(status_code=404, detail="Issuance not found")
+
+    if issuance.return_date:
+        raise HTTPException(status_code=400, detail="Asset already returned")
+
+    # Update issuance
+    issuance.return_date = return_data.return_date
+    issuance.return_condition = return_data.return_condition
+    issuance.lost = return_data.lost
+    if return_data.remarks:
+        issuance.remarks = return_data.remarks
+
+    # Update asset status
+    asset_result = await db.execute(
+        select(Asset).where(Asset.id == issuance.asset_id)
+    )
+    asset = asset_result.scalar_one_or_none()
+
+    if asset:
+        if return_data.lost:
+            asset.status = AssetStatus.LOST
+        else:
+            asset.status = AssetStatus.AVAILABLE
+
+    await db.commit()
+    await db.refresh(issuance)
+
+    # Build response
+    response_data = IssuanceResponse.model_validate(issuance)
+    response_data.is_active = False
+
+    return response_data
+
+
+@router.get("/{asset_id}/issuances", response_model=List[IssuanceResponse])
+async def get_asset_issuances(
+    asset_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    token_data: dict = Depends(get_token_data)
+):
+    """Get all issuances for an asset"""
+    org_id = UUID(token_data.get("org_id"))
+
+    result = await db.execute(
+        select(AssetIssuance)
+        .where(AssetIssuance.asset_id == asset_id, AssetIssuance.org_id == org_id)
+        .order_by(AssetIssuance.issue_date.desc())
+    )
+    issuances = result.scalars().all()
+
+    # Enrich with names
+    responses = []
+    for issuance in issuances:
+        response_data = IssuanceResponse.model_validate(issuance)
+        response_data.is_active = issuance.return_date is None
+
+        # Get employee name
+        if issuance.issued_to_employee:
+            emp_result = await db.execute(
+                select(Employee).where(Employee.id == issuance.issued_to_employee)
+            )
+            emp = emp_result.scalar_one_or_none()
+            if emp:
+                response_data.employee_name = f"{emp.first_name} {emp.last_name}"
+
+        # Get site name
+        if issuance.issued_to_site:
+            site_result = await db.execute(
+                select(Site).where(Site.id == issuance.issued_to_site)
+            )
+            site = site_result.scalar_one_or_none()
+            if site:
+                response_data.site_name = site.site_name
+
+        responses.append(response_data)
+
+    return responses

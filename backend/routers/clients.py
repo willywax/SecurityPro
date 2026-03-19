@@ -1,29 +1,20 @@
-# Client Router - CRUD operations for Client management module
+# Client Router - CRUD operations for Client management module - Migrated to SQLAlchemy
 
 from fastapi import APIRouter, HTTPException, status, Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
-from datetime import datetime, timezone
-from enum import Enum
+from datetime import datetime
+from uuid import UUID
 import uuid
 
+from db.dependencies import get_db
+from models.client import Client
+from models.enums import ClientStatus
 from utils.auth import get_token_data
 
 router = APIRouter(prefix="/clients", tags=["Clients"])
-
-db = None
-
-def set_db(database):
-    global db
-    db = database
-
-
-# ============ ENUMS ============
-
-class ClientStatus(str, Enum):
-    ACTIVE = "active"
-    INACTIVE = "inactive"
-    PROSPECT = "prospect"
 
 
 # ============ SCHEMAS ============
@@ -53,8 +44,8 @@ class ClientUpdate(BaseModel):
 
 
 class ClientResponse(BaseModel):
-    id: str
-    org_id: str
+    id: UUID
+    org_id: UUID
     client_id: str
     client_name: str
     contact_person: Optional[str] = None
@@ -63,11 +54,14 @@ class ClientResponse(BaseModel):
     email: Optional[str] = None
     billing_email: Optional[str] = None
     address: Optional[str] = None
-    status: str
+    status: ClientStatus
     notes: Optional[str] = None
-    created_at: str
-    updated_at: str
-    created_by: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    created_by: Optional[UUID] = None
+
+    class Config:
+        from_attributes = True
 
 
 class ClientListResponse(BaseModel):
@@ -84,174 +78,168 @@ class MessageResponse(BaseModel):
 
 # ============ HELPERS ============
 
-async def generate_client_id(org_id: str) -> str:
+async def generate_client_id(db: AsyncSession, org_id: UUID) -> str:
     """Generate auto-incrementing client ID like CLT0001"""
-    cursor = db.clients.find(
-        {"org_id": org_id, "client_id": {"$regex": "^CLT"}},
-        {"client_id": 1, "_id": 0}
-    ).sort("client_id", -1).limit(1)
+    result = await db.execute(
+        select(Client.client_id)
+        .where(Client.org_id == org_id)
+        .where(Client.client_id.like("CLT%"))
+        .order_by(Client.client_id.desc())
+        .limit(1)
+    )
+    last_id = result.scalar_one_or_none()
 
-    last = await cursor.to_list(length=1)
-
-    if last and last[0].get("client_id"):
+    if last_id:
         try:
-            num = int(last[0]["client_id"].replace("CLT", ""))
+            num = int(last_id.replace("CLT", ""))
             return f"CLT{str(num + 1).zfill(4)}"
         except ValueError:
-            pass
-
+            return "CLT0001"
     return "CLT0001"
 
 
-# ============ CLIENT ENDPOINTS ============
+# ============ CRUD ENDPOINTS ============
 
-@router.get("", response_model=ClientListResponse)
-async def list_clients(
-    page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=1, le=100),
-    search: Optional[str] = Query(None, description="Search by name, email, phone, or client_id"),
-    status: Optional[ClientStatus] = Query(None, description="Filter by status"),
+@router.post("/", response_model=ClientResponse, status_code=status.HTTP_201_CREATED)
+async def create_client(
+    client: ClientCreate,
+    db: AsyncSession = Depends(get_db),
     token_data: dict = Depends(get_token_data)
 ):
-    """List all clients with pagination, search, and filtering"""
-    org_id = token_data.get("org_id")
+    """Create a new client"""
+    org_id = UUID(token_data.get("org_id"))
+    user_id = UUID(token_data.get("sub"))
 
-    query = {"org_id": org_id}
+    # Generate client ID
+    client_id = await generate_client_id(db, org_id)
 
-    if status:
-        query["status"] = status.value
+    # Create client
+    new_client = Client(
+        org_id=org_id,
+        client_id=client_id,
+        created_by=user_id,
+        **client.model_dump()
+    )
 
+    db.add(new_client)
+    await db.commit()
+    await db.refresh(new_client)
+
+    return new_client
+
+
+@router.get("/", response_model=ClientListResponse)
+async def get_clients(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=100),
+    search: Optional[str] = None,
+    status_filter: Optional[ClientStatus] = None,
+    db: AsyncSession = Depends(get_db),
+    token_data: dict = Depends(get_token_data)
+):
+    """Get all clients with pagination and filters"""
+    org_id = UUID(token_data.get("org_id"))
+
+    # Base query
+    query = select(Client).where(Client.org_id == org_id)
+
+    # Apply filters
     if search:
-        search_regex = {"$regex": search, "$options": "i"}
-        query["$or"] = [
-            {"client_name": search_regex},
-            {"contact_person": search_regex},
-            {"email": search_regex},
-            {"phone_1": search_regex},
-            {"client_id": search_regex},
-        ]
+        query = query.where(
+            (Client.client_name.ilike(f"%{search}%")) |
+            (Client.client_id.ilike(f"%{search}%"))
+        )
+    if status_filter:
+        query = query.where(Client.status == status_filter)
 
-    total = await db.clients.count_documents(query)
-    skip = (page - 1) * page_size
-    total_pages = (total + page_size - 1) // page_size if total > 0 else 1
+    # Count total
+    count_query = select(func.count()).select_from(query.subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar()
 
-    cursor = db.clients.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(page_size)
-    clients = await cursor.to_list(length=page_size)
+    # Paginate
+    query = query.order_by(Client.created_at.desc())
+    query = query.offset((page - 1) * page_size).limit(page_size)
+
+    result = await db.execute(query)
+    clients = result.scalars().all()
 
     return ClientListResponse(
-        clients=[ClientResponse(**c) for c in clients],
+        clients=clients,
         total=total,
         page=page,
         page_size=page_size,
-        total_pages=total_pages
+        total_pages=(total + page_size - 1) // page_size
     )
 
 
-@router.post("", response_model=ClientResponse, status_code=status.HTTP_201_CREATED)
-async def create_client(
-    data: ClientCreate,
-    token_data: dict = Depends(get_token_data)
-):
-    """Create a new client with auto-generated client_id"""
-    org_id = token_data.get("org_id")
-    user_id = token_data.get("sub")
-
-    client_id = await generate_client_id(org_id)
-    now = datetime.now(timezone.utc).isoformat()
-
-    client_doc = {
-        "id": str(uuid.uuid4()),
-        "org_id": org_id,
-        "client_id": client_id,
-        "client_name": data.client_name,
-        "contact_person": data.contact_person,
-        "phone_1": data.phone_1,
-        "phone_2": data.phone_2,
-        "email": data.email,
-        "billing_email": data.billing_email,
-        "address": data.address,
-        "status": data.status.value,
-        "notes": data.notes,
-        "created_at": now,
-        "updated_at": now,
-        "created_by": user_id
-    }
-
-    await db.clients.insert_one(client_doc)
-    return ClientResponse(**client_doc)
-
-
-@router.get("/{client_uuid}", response_model=ClientResponse)
+@router.get("/{client_id}", response_model=ClientResponse)
 async def get_client(
-    client_uuid: str,
+    client_id: UUID,
+    db: AsyncSession = Depends(get_db),
     token_data: dict = Depends(get_token_data)
 ):
-    """Get a single client by UUID"""
-    org_id = token_data.get("org_id")
+    """Get a single client by ID"""
+    org_id = UUID(token_data.get("org_id"))
 
-    client = await db.clients.find_one(
-        {"id": client_uuid, "org_id": org_id},
-        {"_id": 0}
+    result = await db.execute(
+        select(Client).where(Client.id == client_id, Client.org_id == org_id)
     )
+    client = result.scalar_one_or_none()
 
     if not client:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
+        raise HTTPException(status_code=404, detail="Client not found")
 
-    return ClientResponse(**client)
+    return client
 
 
-@router.put("/{client_uuid}", response_model=ClientResponse)
+@router.put("/{client_id}", response_model=ClientResponse)
 async def update_client(
-    client_uuid: str,
-    data: ClientUpdate,
+    client_id: UUID,
+    client_update: ClientUpdate,
+    db: AsyncSession = Depends(get_db),
     token_data: dict = Depends(get_token_data)
 ):
     """Update a client"""
-    org_id = token_data.get("org_id")
+    org_id = UUID(token_data.get("org_id"))
 
-    existing = await db.clients.find_one(
-        {"id": client_uuid, "org_id": org_id},
-        {"_id": 0}
+    result = await db.execute(
+        select(Client).where(Client.id == client_id, Client.org_id == org_id)
     )
+    client = result.scalar_one_or_none()
 
-    if not existing:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
 
-    update_doc = {"updated_at": datetime.now(timezone.utc).isoformat()}
-    update_dict = data.model_dump(exclude_unset=True)
-    for key, value in update_dict.items():
-        if value is not None:
-            if key == "status" and hasattr(value, "value"):
-                update_doc[key] = value.value
-            else:
-                update_doc[key] = value
+    # Update fields
+    update_data = client_update.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(client, field, value)
 
-    await db.clients.update_one(
-        {"id": client_uuid, "org_id": org_id},
-        {"$set": update_doc}
-    )
+    await db.commit()
+    await db.refresh(client)
 
-    updated = await db.clients.find_one(
-        {"id": client_uuid, "org_id": org_id},
-        {"_id": 0}
-    )
-
-    return ClientResponse(**updated)
+    return client
 
 
-@router.delete("/{client_uuid}", response_model=MessageResponse)
+@router.delete("/{client_id}", response_model=MessageResponse)
 async def delete_client(
-    client_uuid: str,
+    client_id: UUID,
+    db: AsyncSession = Depends(get_db),
     token_data: dict = Depends(get_token_data)
 ):
     """Delete a client"""
-    org_id = token_data.get("org_id")
+    org_id = UUID(token_data.get("org_id"))
 
-    result = await db.clients.delete_one(
-        {"id": client_uuid, "org_id": org_id}
+    result = await db.execute(
+        select(Client).where(Client.id == client_id, Client.org_id == org_id)
     )
+    client = result.scalar_one_or_none()
 
-    if result.deleted_count == 0:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    await db.delete(client)
+    await db.commit()
 
     return MessageResponse(message="Client deleted successfully")

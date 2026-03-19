@@ -1,35 +1,28 @@
-# Site Router - CRUD operations for Site management module
+# Site Router - CRUD operations for Site management module - Migrated to SQLAlchemy
 
 from fastapi import APIRouter, HTTPException, status, Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
 from typing import Optional, List
-from datetime import datetime, timezone
-from enum import Enum
+from datetime import datetime
+from uuid import UUID
 import uuid
 
+from db.dependencies import get_db
+from models.site import Site
+from models.client import Client
+from models.enums import SiteStatus
 from utils.auth import get_token_data
 
 router = APIRouter(prefix="/sites", tags=["Sites"])
-
-db = None
-
-def set_db(database):
-    global db
-    db = database
-
-
-# ============ ENUMS ============
-
-class SiteStatus(str, Enum):
-    ACTIVE = "active"
-    INACTIVE = "inactive"
-    UNDER_REVIEW = "under_review"
 
 
 # ============ SCHEMAS ============
 
 class SiteCreate(BaseModel):
-    client_id: str
+    client_id: UUID
     site_name: str
     region: Optional[str] = None
     district: Optional[str] = None
@@ -42,7 +35,7 @@ class SiteCreate(BaseModel):
 
 
 class SiteUpdate(BaseModel):
-    client_id: Optional[str] = None
+    client_id: Optional[UUID] = None
     site_name: Optional[str] = None
     region: Optional[str] = None
     district: Optional[str] = None
@@ -55,10 +48,10 @@ class SiteUpdate(BaseModel):
 
 
 class SiteResponse(BaseModel):
-    id: str
-    org_id: str
+    id: UUID
+    org_id: UUID
     site_id: str
-    client_id: str
+    client_id: UUID
     client_name: Optional[str] = None
     site_name: str
     region: Optional[str] = None
@@ -67,11 +60,14 @@ class SiteResponse(BaseModel):
     address: Optional[str] = None
     contact_person: Optional[str] = None
     contact_phone: Optional[str] = None
-    status: str
+    status: SiteStatus
     notes: Optional[str] = None
-    created_at: str
-    updated_at: str
-    created_by: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    created_by: Optional[UUID] = None
+
+    class Config:
+        from_attributes = True
 
 
 class SiteListResponse(BaseModel):
@@ -88,208 +84,225 @@ class MessageResponse(BaseModel):
 
 # ============ HELPERS ============
 
-async def generate_site_id(org_id: str) -> str:
+async def generate_site_id(db: AsyncSession, org_id: UUID) -> str:
     """Generate auto-incrementing site ID like SITE001"""
-    cursor = db.sites.find(
-        {"org_id": org_id, "site_id": {"$regex": "^SITE"}},
-        {"site_id": 1, "_id": 0}
-    ).sort("site_id", -1).limit(1)
+    result = await db.execute(
+        select(Site.site_id)
+        .where(Site.org_id == org_id)
+        .where(Site.site_id.like("SITE%"))
+        .order_by(Site.site_id.desc())
+        .limit(1)
+    )
+    last_id = result.scalar_one_or_none()
 
-    last = await cursor.to_list(length=1)
-
-    if last and last[0].get("site_id"):
+    if last_id:
         try:
-            num = int(last[0]["site_id"].replace("SITE", ""))
+            num = int(last_id.replace("SITE", ""))
             return f"SITE{str(num + 1).zfill(3)}"
         except ValueError:
-            pass
-
+            return "SITE001"
     return "SITE001"
 
 
-async def enrich_with_client_name(doc: dict, org_id: str) -> dict:
-    """Add client_name to a site document"""
-    client = await db.clients.find_one(
-        {"id": doc["client_id"], "org_id": org_id},
-        {"client_name": 1, "_id": 0}
-    )
-    return {**doc, "client_name": client.get("client_name") if client else None}
+# ============ CRUD ENDPOINTS ============
 
-
-# ============ SITE ENDPOINTS ============
-
-@router.get("", response_model=SiteListResponse)
-async def list_sites(
-    page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=1, le=100),
-    search: Optional[str] = Query(None, description="Search by name, region, district, or site_id"),
-    client_id: Optional[str] = Query(None, description="Filter by client UUID"),
-    status: Optional[SiteStatus] = Query(None, description="Filter by status"),
+@router.post("/", response_model=SiteResponse, status_code=status.HTTP_201_CREATED)
+async def create_site(
+    site: SiteCreate,
+    db: AsyncSession = Depends(get_db),
     token_data: dict = Depends(get_token_data)
 ):
-    """List all sites with pagination, search, and filtering"""
-    org_id = token_data.get("org_id")
+    """Create a new site"""
+    org_id = UUID(token_data.get("org_id"))
+    user_id = UUID(token_data.get("sub"))
 
-    query = {"org_id": org_id}
+    # Verify client exists
+    client_result = await db.execute(
+        select(Client).where(Client.id == site.client_id, Client.org_id == org_id)
+    )
+    client = client_result.scalar_one_or_none()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
 
-    if client_id:
-        query["client_id"] = client_id
+    # Generate site ID
+    site_id = await generate_site_id(db, org_id)
 
-    if status:
-        query["status"] = status.value
+    # Create site
+    new_site = Site(
+        org_id=org_id,
+        site_id=site_id,
+        created_by=user_id,
+        **site.model_dump()
+    )
 
+    db.add(new_site)
+    await db.commit()
+    await db.refresh(new_site)
+
+    # Add client name to response
+    response_data = SiteResponse.model_validate(new_site)
+    response_data.client_name = client.client_name
+
+    return response_data
+
+
+@router.get("/", response_model=SiteListResponse)
+async def get_sites(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=100),
+    search: Optional[str] = None,
+    client_id: Optional[UUID] = None,
+    status_filter: Optional[SiteStatus] = None,
+    db: AsyncSession = Depends(get_db),
+    token_data: dict = Depends(get_token_data)
+):
+    """Get all sites with pagination and filters"""
+    org_id = UUID(token_data.get("org_id"))
+
+    # Base query
+    query = select(Site).where(Site.org_id == org_id)
+
+    # Apply filters
     if search:
-        search_regex = {"$regex": search, "$options": "i"}
-        query["$or"] = [
-            {"site_name": search_regex},
-            {"contact_person": search_regex},
-            {"region": search_regex},
-            {"district": search_regex},
-            {"site_id": search_regex},
-        ]
+        query = query.where(
+            (Site.site_name.ilike(f"%{search}%")) |
+            (Site.site_id.ilike(f"%{search}%"))
+        )
+    if client_id:
+        query = query.where(Site.client_id == client_id)
+    if status_filter:
+        query = query.where(Site.status == status_filter)
 
-    total = await db.sites.count_documents(query)
-    skip = (page - 1) * page_size
-    total_pages = (total + page_size - 1) // page_size if total > 0 else 1
+    # Count total
+    count_query = select(func.count()).select_from(query.subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar()
 
-    cursor = db.sites.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(page_size)
-    sites = await cursor.to_list(length=page_size)
+    # Paginate
+    query = query.order_by(Site.created_at.desc())
+    query = query.offset((page - 1) * page_size).limit(page_size)
 
-    enriched = []
+    result = await db.execute(query)
+    sites = result.scalars().all()
+
+    # Enrich with client names
+    site_responses = []
     for site in sites:
-        enriched.append(SiteResponse(**(await enrich_with_client_name(site, org_id))))
+        client_result = await db.execute(
+            select(Client).where(Client.id == site.client_id)
+        )
+        client = client_result.scalar_one_or_none()
+
+        site_data = SiteResponse.model_validate(site)
+        if client:
+            site_data.client_name = client.client_name
+        site_responses.append(site_data)
 
     return SiteListResponse(
-        sites=enriched,
+        sites=site_responses,
         total=total,
         page=page,
         page_size=page_size,
-        total_pages=total_pages
+        total_pages=(total + page_size - 1) // page_size
     )
 
 
-@router.post("", response_model=SiteResponse, status_code=status.HTTP_201_CREATED)
-async def create_site(
-    data: SiteCreate,
-    token_data: dict = Depends(get_token_data)
-):
-    """Create a new site with auto-generated site_id"""
-    org_id = token_data.get("org_id")
-    user_id = token_data.get("sub")
-
-    # Verify client exists and belongs to org
-    client = await db.clients.find_one(
-        {"id": data.client_id, "org_id": org_id},
-        {"client_name": 1, "_id": 0}
-    )
-    if not client:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
-
-    site_id = await generate_site_id(org_id)
-    now = datetime.now(timezone.utc).isoformat()
-
-    site_doc = {
-        "id": str(uuid.uuid4()),
-        "org_id": org_id,
-        "site_id": site_id,
-        "client_id": data.client_id,
-        "site_name": data.site_name,
-        "region": data.region,
-        "district": data.district,
-        "ward": data.ward,
-        "address": data.address,
-        "contact_person": data.contact_person,
-        "contact_phone": data.contact_phone,
-        "status": data.status.value,
-        "notes": data.notes,
-        "created_at": now,
-        "updated_at": now,
-        "created_by": user_id
-    }
-
-    await db.sites.insert_one(site_doc)
-    return SiteResponse(**{**site_doc, "client_name": client["client_name"]})
-
-
-@router.get("/{site_uuid}", response_model=SiteResponse)
+@router.get("/{site_id}", response_model=SiteResponse)
 async def get_site(
-    site_uuid: str,
+    site_id: UUID,
+    db: AsyncSession = Depends(get_db),
     token_data: dict = Depends(get_token_data)
 ):
-    """Get a single site by UUID, includes client_name"""
-    org_id = token_data.get("org_id")
+    """Get a single site by ID"""
+    org_id = UUID(token_data.get("org_id"))
 
-    site = await db.sites.find_one(
-        {"id": site_uuid, "org_id": org_id},
-        {"_id": 0}
+    result = await db.execute(
+        select(Site).where(Site.id == site_id, Site.org_id == org_id)
     )
+    site = result.scalar_one_or_none()
 
     if not site:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+        raise HTTPException(status_code=404, detail="Site not found")
 
-    return SiteResponse(**(await enrich_with_client_name(site, org_id)))
+    # Get client name
+    client_result = await db.execute(
+        select(Client).where(Client.id == site.client_id)
+    )
+    client = client_result.scalar_one_or_none()
+
+    response_data = SiteResponse.model_validate(site)
+    if client:
+        response_data.client_name = client.client_name
+
+    return response_data
 
 
-@router.put("/{site_uuid}", response_model=SiteResponse)
+@router.put("/{site_id}", response_model=SiteResponse)
 async def update_site(
-    site_uuid: str,
-    data: SiteUpdate,
+    site_id: UUID,
+    site_update: SiteUpdate,
+    db: AsyncSession = Depends(get_db),
     token_data: dict = Depends(get_token_data)
 ):
     """Update a site"""
-    org_id = token_data.get("org_id")
+    org_id = UUID(token_data.get("org_id"))
 
-    existing = await db.sites.find_one(
-        {"id": site_uuid, "org_id": org_id},
-        {"_id": 0}
+    result = await db.execute(
+        select(Site).where(Site.id == site_id, Site.org_id == org_id)
     )
+    site = result.scalar_one_or_none()
 
-    if not existing:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    if not site:
+        raise HTTPException(status_code=404, detail="Site not found")
 
-    # If client_id is changing, verify new client exists
-    if data.client_id and data.client_id != existing["client_id"]:
-        client_check = await db.clients.find_one(
-            {"id": data.client_id, "org_id": org_id}
+    # If client_id is being updated, verify it exists
+    if site_update.client_id:
+        client_result = await db.execute(
+            select(Client).where(Client.id == site_update.client_id, Client.org_id == org_id)
         )
-        if not client_check:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
+        client = client_result.scalar_one_or_none()
+        if not client:
+            raise HTTPException(status_code=404, detail="Client not found")
 
-    update_doc = {"updated_at": datetime.now(timezone.utc).isoformat()}
-    update_dict = data.model_dump(exclude_unset=True)
-    for key, value in update_dict.items():
-        if value is not None:
-            if key == "status" and hasattr(value, "value"):
-                update_doc[key] = value.value
-            else:
-                update_doc[key] = value
+    # Update fields
+    update_data = site_update.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(site, field, value)
 
-    await db.sites.update_one(
-        {"id": site_uuid, "org_id": org_id},
-        {"$set": update_doc}
+    await db.commit()
+    await db.refresh(site)
+
+    # Get client name
+    client_result = await db.execute(
+        select(Client).where(Client.id == site.client_id)
     )
+    client = client_result.scalar_one_or_none()
 
-    updated = await db.sites.find_one(
-        {"id": site_uuid, "org_id": org_id},
-        {"_id": 0}
-    )
+    response_data = SiteResponse.model_validate(site)
+    if client:
+        response_data.client_name = client.client_name
 
-    return SiteResponse(**(await enrich_with_client_name(updated, org_id)))
+    return response_data
 
 
-@router.delete("/{site_uuid}", response_model=MessageResponse)
+@router.delete("/{site_id}", response_model=MessageResponse)
 async def delete_site(
-    site_uuid: str,
+    site_id: UUID,
+    db: AsyncSession = Depends(get_db),
     token_data: dict = Depends(get_token_data)
 ):
     """Delete a site"""
-    org_id = token_data.get("org_id")
+    org_id = UUID(token_data.get("org_id"))
 
-    result = await db.sites.delete_one(
-        {"id": site_uuid, "org_id": org_id}
+    result = await db.execute(
+        select(Site).where(Site.id == site_id, Site.org_id == org_id)
     )
+    site = result.scalar_one_or_none()
 
-    if result.deleted_count == 0:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    if not site:
+        raise HTTPException(status_code=404, detail="Site not found")
+
+    await db.delete(site)
+    await db.commit()
 
     return MessageResponse(message="Site deleted successfully")
