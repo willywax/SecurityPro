@@ -10,7 +10,7 @@ import json
 from datetime import datetime
 
 class SecurityOpsAPITester:
-    def __init__(self, base_url="https://security-ops-demo-2.preview.emergentagent.com"):
+    def __init__(self, base_url="https://payroll-track-11.preview.emergentagent.com"):
         self.base_url = base_url.rstrip('/')
         self.access_token = None
         self.refresh_token = None
