@@ -12,6 +12,8 @@ import ClientList from './pages/ClientList';
 import ClientDetail from './pages/ClientDetail';
 import SiteList from './pages/SiteList';
 import SiteDetail from './pages/SiteDetail';
+import AssetList from './pages/AssetList';
+import AssetDetail from './pages/AssetDetail';
 import { Toaster } from './components/ui/sonner';
 
 // Placeholder pages for navigation items
@@ -47,7 +49,8 @@ function App() {
             <Route path="/clients/:id" element={<ClientDetail />} />
             <Route path="/sites" element={<SiteList />} />
             <Route path="/sites/:id" element={<SiteDetail />} />
-            <Route path="/assets" element={<PlaceholderPage title="Assets" />} />
+            <Route path="/assets" element={<AssetList />} />
+            <Route path="/assets/:id" element={<AssetDetail />} />
             <Route path="/payroll" element={<PlaceholderPage title="Payroll" />} />
             <Route path="/invoices" element={<PlaceholderPage title="Invoices" />} />
             <Route path="/settings" element={<PlaceholderPage title="Settings" />} />
