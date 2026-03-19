@@ -64,6 +64,19 @@ Build a multi-tenant SaaS monorepo called "Security Operations SaaS" for securit
 - ✅ Return asset action with return condition + lost flag
 - ✅ Asset status auto-updates: available → issued → available/lost
 
+### Phase 6 - Invoices Module (March 19, 2026)
+- ✅ Invoice list page (/invoices) — flat list with filters (client, status, month)
+- ✅ Invoice create page (/invoices/new) — select client → sites auto-load → guard/asset line items → live TZS grand total → save
+- ✅ Invoice detail page (/invoices/:id) — grouped layout by site, site subtotals, grand total, bank details card
+- ✅ Status transitions: Draft → Sent → Paid / Overdue
+- ✅ Edit mode with pre-populated items (full replace of sites+items on save)
+- ✅ Delete (draft only) with cascade delete of sites+items
+- ✅ Print/Download via window.open() — clean A4 HTML layout with company/client/bank info
+- ✅ Invoice ID auto-generated (INV0001, INV0002...)
+- ✅ Bank details stored on org (CRDB Bank Tanzania default) and displayed on invoice
+- ✅ Currency: TZS throughout
+- ✅ GET /api/organization endpoint returns full org + bank_details
+
 ### Phase 5 - Payroll Module (March 19, 2026)
 - ✅ Payroll list page (/payroll) — flat list with filters (month, employee, status), clear filters button
 - ✅ Payroll create page (/payroll/new) — tab-based with Single Entry + Bulk Entry modes
@@ -83,6 +96,7 @@ Build a multi-tenant SaaS monorepo called "Security Operations SaaS" for securit
 
 - Asset: ASSET0001
 - Payroll: PAY0001
+- Invoice: INV0001
 
 ### API Endpoints
 
@@ -123,11 +137,17 @@ Build a multi-tenant SaaS monorepo called "Security Operations SaaS" for securit
 - POST /api/payroll/bulk
 - GET/PUT/DELETE /api/payroll/:id
 
+**Invoices:**
+- GET/POST /api/invoices
+- GET/PUT/DELETE /api/invoices/:id
+- PUT /api/invoices/:id/status
+- GET /api/organization
+
 ## Prioritized Backlog
 
 ### P0 - Next Up
-- [ ] Invoice generation module
-- [ ] Payments module
+- [ ] Payments module (record payments against invoices)
+- [ ] Reports/Analytics dashboard
 
 ### P1 - High Priority
 - [ ] Invoice generation module
