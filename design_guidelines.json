@@ -1,0 +1,126 @@
+{
+  "project_name": "Security Operations SaaS",
+  "design_philosophy": {
+    "archetype": "The Performance Pro",
+    "core_values": ["Authority", "Clarity", "Speed", "Reliability"],
+    "visual_style": "Tactical Minimalism. Sharp edges, high contrast, dense information density, trusted colors.",
+    "theme_strategy": "Light Mode default for Admin/Management. Sidebar is always Dark (#0F172A).",
+    "universal_rules": [
+      "No gradients on text.",
+      "No soft/diffuse shadows; use crisp borders.",
+      "Interactive elements must have clear hover states.",
+      "Use data-testid attributes on ALL interactive elements."
+    ]
+  },
+  "typography": {
+    "font_family": {
+      "headings": "Inter, sans-serif",
+      "body": "Inter, sans-serif",
+      "mono": "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+    },
+    "usage_rules": {
+      "headings": "font-bold tracking-tight text-slate-900. H1: text-3xl/tight, H2: text-2xl/tight",
+      "subheadings": "font-medium text-slate-500 tracking-normal",
+      "body": "text-sm text-slate-600 leading-relaxed",
+      "labels": "text-xs font-semibold uppercase tracking-wider text-slate-500"
+    }
+  },
+  "colors": {
+    "palette": {
+      "primary": {
+        "DEFAULT": "#0F172A",
+        "foreground": "#FFFFFF",
+        "description": "The core brand color. Used for Sidebar, Primary Buttons, Active States."
+      },
+      "secondary": {
+        "DEFAULT": "#F1F5F9",
+        "foreground": "#0F172A",
+        "description": "Used for secondary buttons, muted backgrounds."
+      },
+      "accent": {
+        "DEFAULT": "var(--org-accent-color, #3B82F6)",
+        "foreground": "#FFFFFF",
+        "description": "Dynamic organization color. Defaults to Blue-500 if not set."
+      },
+      "background": "#F8FAFC",
+      "surface": "#FFFFFF",
+      "border": "#E2E8F0"
+    },
+    "status": {
+      "success": "#10B981",
+      "warning": "#F59E0B",
+      "danger": "#EF4444",
+      "info": "#3B82F6"
+    }
+  },
+  "layout_system": {
+    "grid_structure": "Bento Grid Mode B (High Density)",
+    "spacing": {
+      "container_padding": "p-6 md:p-8",
+      "element_gap": "gap-4 md:gap-6",
+      "section_gap": "space-y-8"
+    },
+    "containers": {
+      "card": "bg-white border border-slate-200 rounded-lg shadow-sm",
+      "sidebar": "bg-[#0F172A] text-slate-300 w-64 fixed h-full z-30",
+      "header": "h-16 border-b border-slate-200 bg-white/80 backdrop-blur-md sticky top-0 z-20"
+    }
+  },
+  "components": {
+    "button": {
+      "primary": "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm h-10 px-4 py-2 rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
+      "secondary": "bg-white text-slate-900 border border-slate-200 hover:bg-slate-50 shadow-sm h-10 px-4 py-2 rounded-md font-medium transition-colors",
+      "ghost": "hover:bg-slate-100 hover:text-slate-900 h-10 px-4 py-2 rounded-md font-medium transition-colors",
+      "destructive": "bg-red-600 text-white hover:bg-red-700 shadow-sm h-10 px-4 py-2 rounded-md font-medium transition-colors"
+    },
+    "input": {
+      "base": "flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:border-primary disabled:cursor-not-allowed disabled:opacity-50",
+      "label": "text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 mb-2 block"
+    },
+    "card": {
+      "wrapper": "rounded-lg border border-slate-200 bg-white text-slate-950 shadow-sm",
+      "header": "flex flex-col space-y-1.5 p-6",
+      "title": "text-lg font-semibold leading-none tracking-tight",
+      "content": "p-6 pt-0"
+    }
+  },
+  "assets": {
+    "images": {
+      "login_background": {
+        "url": "https://images.unsplash.com/photo-1747455917568-d89241cd1423?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NTZ8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMG1vZGVybiUyMGFyY2hpdGVjdHVyZSUyMHNlY3VyaXR5JTIwYmx1ZSUyMG1pbmltYWxpc3R8ZW58MHx8fHwxNzczOTEzNTI1fDA&ixlib=rb-4.1.0&q=85",
+        "alt": "Modern secure architecture abstract",
+        "description": "Use this image for the right-side panel of the login page. Apply a slight dark overlay (bg-slate-900/20) to ensure text legibility if text is placed over it, though usually, it's decorative."
+      },
+      "default_logo": {
+        "type": "text-fallback",
+        "text": "SecureOps",
+        "style": "font-bold text-xl tracking-tight flex items-center gap-2"
+      }
+    },
+    "icons": {
+      "library": "lucide-react",
+      "preferred_set": ["Shield", "Lock", "Users", "Activity", "Building", "LogOut", "Settings", "Menu", "X", "Check", "AlertTriangle"]
+    }
+  },
+  "branding_strategy": {
+    "instructions": "Implement dynamic branding by applying CSS variables to the root or a 'theme-wrapper' div. When a user belongs to an org, inject: --org-accent-color: {org.accent_color}.",
+    "variables": {
+      "--org-accent-color": "#3B82F6"
+    }
+  },
+  "instructions_to_main_agent": [
+    "1. SETUP: Ensure Tailwind config includes the custom colors defined in 'colors' section.",
+    "2. LOGIN PAGE: Create a split layout. Left side (40%): Login Form. Right side (60%): 'login_background' image (hidden on mobile).",
+    "3. DASHBOARD: Implement a Sidebar Layout. Sidebar fixed left (w-64, bg-primary). Header fixed top (h-16, bg-white, left-64). Main content (p-8, bg-slate-50).",
+    "4. MULTI-TENANCY: The Sidebar Logo area must display the Org Name (or Logo if available). The active accent color (buttons, links) should use the Org's accent color.",
+    "5. FORGOT PASSWORD: Create a simple centered card layout for this flow.",
+    "6. TESTING: Add 'data-testid' to: Login Button ('btn-login'), Email Input ('input-email'), Password Input ('input-password'), Forgot Password Link ('link-forgot-password')."
+  ],
+  "universal_guidelines": [
+    "Do not use gradients for text.",
+    "Use 24px-32px padding inside cards.",
+    "Input fields must have distinct :focus states.",
+    "Error messages must be red-600 and text-sm.",
+    "Success messages must be emerald-600 and text-sm."
+  ]
+}
