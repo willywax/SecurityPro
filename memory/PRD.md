@@ -64,6 +64,16 @@ Build a multi-tenant SaaS monorepo called "Security Operations SaaS" for securit
 - ✅ Return asset action with return condition + lost flag
 - ✅ Asset status auto-updates: available → issued → available/lost
 
+### Phase 5 - Payroll Module (March 19, 2026)
+- ✅ Payroll list page (/payroll) — flat list with filters (month, employee, status), clear filters button
+- ✅ Payroll create page (/payroll/new) — tab-based with Single Entry + Bulk Entry modes
+- ✅ Single Entry: select employee, month, salary fields (base/allowances/overtime/deductions), net pay auto-preview
+- ✅ Bulk Entry: pick month → auto-loads all active employees, remove rows (X), net pay per row, submit all
+- ✅ Payroll detail page (/payroll/:id) — view, edit, approve (draft→approved), mark as paid (approved→paid), delete (draft only)
+- ✅ Payroll ID auto-generated (PAY0001, PAY0002...)
+- ✅ Net pay auto-calculated: base + allowances + overtime - deductions
+- ✅ Bulk create endpoint with duplicate detection and skip reporting
+
 ### Auto-Generated ID Formats
 - Employee: EMP0001
 - Guard No: G0001
@@ -72,6 +82,7 @@ Build a multi-tenant SaaS monorepo called "Security Operations SaaS" for securit
 - Contract: CTR-2026-0001
 
 - Asset: ASSET0001
+- Payroll: PAY0001
 
 ### API Endpoints
 
@@ -107,14 +118,18 @@ Build a multi-tenant SaaS monorepo called "Security Operations SaaS" for securit
 - POST /api/assets/:id/issue
 - PUT /api/assets/:id/issuances/:iid/return
 
+**Payroll:**
+- GET/POST /api/payroll
+- POST /api/payroll/bulk
+- GET/PUT/DELETE /api/payroll/:id
+
 ## Prioritized Backlog
 
 ### P0 - Next Up
-- [ ] Payroll processing module
 - [ ] Invoice generation module
+- [ ] Payments module
 
 ### P1 - High Priority
-- [ ] Payroll processing module
 - [ ] Invoice generation module
 - [ ] Payments module
 
