@@ -298,16 +298,15 @@ class SecurityOpsAPITester:
         return success
 
     def test_employees_crud(self):
-        """Test Employee CRUD operations"""
+        """Test Employee CRUD operations with auto-generated IDs"""
         self.log("\n👥 Testing Employee CRUD Operations")
         
         if not self.access_token:
             self.log("❌ No access token available for employee tests")
             return False
         
-        # Test data for employee creation
+        # Test data for employee creation - NO employee_id as it's auto-generated
         test_employee_data = {
-            "employee_id": f"TEST{datetime.now().strftime('%H%M%S')}",
             "first_name": "Test",
             "last_name": "Employee", 
             "email": "test.employee@securityops.com",
@@ -332,10 +331,22 @@ class SecurityOpsAPITester:
         
         if success and response:
             created_employee_id = response.get('id')
-            if created_employee_id:
-                self.log(f"   Created employee ID: {created_employee_id}")
+            auto_employee_id = response.get('employee_id')
+            auto_guard_no = response.get('guard_no')
+            
+            if created_employee_id and auto_employee_id and auto_guard_no:
+                self.log(f"   Created UUID: {created_employee_id}")
+                self.log(f"   Auto-generated Employee ID: {auto_employee_id}")
+                self.log(f"   Auto-generated Guard No: {auto_guard_no}")
+                
+                # Verify ID formats
+                if auto_employee_id.startswith('EMP') and auto_guard_no.startswith('G'):
+                    self.log("   ✅ Auto-generated IDs have correct format")
+                else:
+                    self.log("   ❌ Auto-generated IDs have incorrect format")
+                    all_tests_passed = False
             else:
-                self.log("   ❌ No employee ID in response")
+                self.log("   ❌ Missing IDs in response")
                 all_tests_passed = False
         else:
             all_tests_passed = False
@@ -484,6 +495,308 @@ class SecurityOpsAPITester:
         
         return all_tests_passed
 
+    def test_bank_details_crud(self):
+        """Test Bank Details CRUD operations"""
+        self.log("\n💳 Testing Bank Details CRUD")
+        
+        if not self.access_token:
+            self.log("❌ No access token available")
+            return False
+        
+        # First create a test employee
+        employee_data = {
+            "first_name": "Bank", "last_name": "Test",
+            "employment_status": "active"
+        }
+        
+        success, emp_response = self.run_test(
+            "Create Employee for Bank Test",
+            "POST", "/employees", 201, data=employee_data
+        )
+        
+        if not success or not emp_response.get('id'):
+            return False
+        
+        employee_id = emp_response['id']
+        all_tests_passed = True
+        
+        try:
+            # Test 1: Get bank details (should be None initially)
+            success1, response1 = self.run_test(
+                "Get Bank Details - Empty",
+                "GET", f"/employees/{employee_id}/bank-account", 200
+            )
+            
+            # Test 2: Create bank details
+            bank_data = {
+                "bank_name": "Test Bank",
+                "bank_branch": "Main Branch", 
+                "account_name": "Bank Test",
+                "account_number": "123456789"
+            }
+            
+            success2, response2 = self.run_test(
+                "Create Bank Details",
+                "POST", f"/employees/{employee_id}/bank-account", 201,
+                data=bank_data
+            )
+            
+            if success2 and response2:
+                bank_id = response2.get('id')
+                if response2.get('bank_name') == "Test Bank":
+                    self.log("   ✅ Bank details created successfully")
+                else:
+                    all_tests_passed = False
+            else:
+                all_tests_passed = False
+            
+            # Test 3: Update bank details
+            update_data = {"bank_name": "Updated Bank"}
+            success3, response3 = self.run_test(
+                "Update Bank Details",
+                "PUT", f"/employees/{employee_id}/bank-account", 200,
+                data=update_data
+            )
+            
+            if success3 and response3.get('bank_name') == "Updated Bank":
+                self.log("   ✅ Bank details updated successfully")
+            else:
+                all_tests_passed = False
+            
+            # Test 4: Delete bank details
+            success4, response4 = self.run_test(
+                "Delete Bank Details",
+                "DELETE", f"/employees/{employee_id}/bank-account", 200
+            )
+            
+            if success4 and 'deleted' in response4.get('message', '').lower():
+                self.log("   ✅ Bank details deleted successfully")
+            else:
+                all_tests_passed = False
+                
+        finally:
+            # Cleanup - delete test employee
+            self.run_test(
+                "Cleanup Bank Test Employee", 
+                "DELETE", f"/employees/{employee_id}", 200
+            )
+        
+        return all_tests_passed
+
+    def test_referees_crud(self):
+        """Test Referees CRUD operations"""
+        self.log("\n👥 Testing Referees CRUD")
+        
+        if not self.access_token:
+            self.log("❌ No access token available")
+            return False
+        
+        # Create test employee
+        employee_data = {
+            "first_name": "Referee", "last_name": "Test",
+            "employment_status": "active"
+        }
+        
+        success, emp_response = self.run_test(
+            "Create Employee for Referee Test",
+            "POST", "/employees", 201, data=employee_data
+        )
+        
+        if not success or not emp_response.get('id'):
+            return False
+        
+        employee_id = emp_response['id']
+        all_tests_passed = True
+        
+        try:
+            # Test 1: List referees (should be empty)
+            success1, response1 = self.run_test(
+                "List Referees - Empty",
+                "GET", f"/employees/{employee_id}/referees", 200
+            )
+            
+            if success1 and len(response1) == 0:
+                self.log("   ✅ Empty referees list correct")
+            else:
+                all_tests_passed = False
+            
+            # Test 2: Create referee
+            referee_data = {
+                "full_name": "John Referee",
+                "relationship": "Former Employer",
+                "phone_number": "+256700123456",
+                "alternate_phone": "+256700654321",
+                "id_type": "national_id",
+                "id_number": "CM12345678ABCD",
+                "address": "Kampala, Uganda",
+                "occupation": "Manager"
+            }
+            
+            success2, response2 = self.run_test(
+                "Create Referee",
+                "POST", f"/employees/{employee_id}/referees", 201,
+                data=referee_data
+            )
+            
+            referee_id = None
+            if success2 and response2:
+                referee_id = response2.get('id')
+                if response2.get('full_name') == "John Referee":
+                    self.log("   ✅ Referee created successfully")
+                else:
+                    all_tests_passed = False
+            else:
+                all_tests_passed = False
+            
+            # Test 3: Get single referee
+            if referee_id:
+                success3, response3 = self.run_test(
+                    "Get Single Referee",
+                    "GET", f"/employees/{employee_id}/referees/{referee_id}", 200
+                )
+                
+                if success3 and response3.get('full_name') == "John Referee":
+                    self.log("   ✅ Get referee working")
+                else:
+                    all_tests_passed = False
+            
+            # Test 4: Update referee
+            if referee_id:
+                update_data = {"occupation": "Senior Manager"}
+                success4, response4 = self.run_test(
+                    "Update Referee",
+                    "PUT", f"/employees/{employee_id}/referees/{referee_id}", 200,
+                    data=update_data
+                )
+                
+                if success4 and response4.get('occupation') == "Senior Manager":
+                    self.log("   ✅ Referee updated successfully")
+                else:
+                    all_tests_passed = False
+            
+            # Test 5: List referees (should have 1)
+            success5, response5 = self.run_test(
+                "List Referees - With Data",
+                "GET", f"/employees/{employee_id}/referees", 200
+            )
+            
+            if success5 and len(response5) == 1:
+                self.log("   ✅ Referees list correct")
+            else:
+                all_tests_passed = False
+            
+            # Test 6: Delete referee
+            if referee_id:
+                success6, response6 = self.run_test(
+                    "Delete Referee",
+                    "DELETE", f"/employees/{employee_id}/referees/{referee_id}", 200
+                )
+                
+                if success6 and 'deleted' in response6.get('message', '').lower():
+                    self.log("   ✅ Referee deleted successfully")
+                else:
+                    all_tests_passed = False
+                    
+        finally:
+            # Cleanup
+            self.run_test(
+                "Cleanup Referee Test Employee",
+                "DELETE", f"/employees/{employee_id}", 200
+            )
+        
+        return all_tests_passed
+
+    def test_next_of_kin_crud(self):
+        """Test Next of Kin CRUD operations"""
+        self.log("\n❤️  Testing Next of Kin CRUD")
+        
+        if not self.access_token:
+            self.log("❌ No access token available")
+            return False
+        
+        # Create test employee
+        employee_data = {
+            "first_name": "NextOfKin", "last_name": "Test",
+            "employment_status": "active"
+        }
+        
+        success, emp_response = self.run_test(
+            "Create Employee for NOK Test",
+            "POST", "/employees", 201, data=employee_data
+        )
+        
+        if not success or not emp_response.get('id'):
+            return False
+        
+        employee_id = emp_response['id']
+        all_tests_passed = True
+        
+        try:
+            # Test 1: Get next of kin (should be None)
+            success1, response1 = self.run_test(
+                "Get Next of Kin - Empty",
+                "GET", f"/employees/{employee_id}/next-of-kin", 200
+            )
+            
+            # Test 2: Create next of kin
+            nok_data = {
+                "full_name": "Jane Spouse",
+                "relationship": "Spouse",
+                "phone_1": "+256700111111",
+                "phone_2": "+256700222222",
+                "address": "Home Address, Kampala",
+                "id_type": "national_id",
+                "id_number": "CM87654321EFGH",
+                "notes": "Emergency contact"
+            }
+            
+            success2, response2 = self.run_test(
+                "Create Next of Kin",
+                "POST", f"/employees/{employee_id}/next-of-kin", 201,
+                data=nok_data
+            )
+            
+            if success2 and response2:
+                nok_id = response2.get('id')
+                if response2.get('full_name') == "Jane Spouse":
+                    self.log("   ✅ Next of kin created successfully")
+                else:
+                    all_tests_passed = False
+            else:
+                all_tests_passed = False
+            
+            # Test 3: Update next of kin
+            update_data = {"relationship": "Wife"}
+            success3, response3 = self.run_test(
+                "Update Next of Kin",
+                "PUT", f"/employees/{employee_id}/next-of-kin", 200,
+                data=update_data
+            )
+            
+            if success3 and response3.get('relationship') == "Wife":
+                self.log("   ✅ Next of kin updated successfully")
+            else:
+                all_tests_passed = False
+            
+            # Test 4: Delete next of kin
+            success4, response4 = self.run_test(
+                "Delete Next of Kin",
+                "DELETE", f"/employees/{employee_id}/next-of-kin", 200
+            )
+            
+            if success4 and 'deleted' in response4.get('message', '').lower():
+                self.log("   ✅ Next of kin deleted successfully")
+            else:
+                all_tests_passed = False
+                
+        finally:
+            # Cleanup
+            self.run_test(
+                "Cleanup NOK Test Employee",
+                "DELETE", f"/employees/{employee_id}", 200
+            )
+        
+        return all_tests_passed
     def test_employee_validation(self):
         """Test employee creation validation"""
         self.log("\n🔍 Testing Employee Validation")
@@ -515,7 +828,6 @@ class SecurityOpsAPITester:
             "/employees", 
             422,
             data={
-                "employee_id": "TESTINVALID",
                 "first_name": "Test",
                 "last_name": "Employee",
                 "email": "invalid-email-format"
@@ -527,17 +839,15 @@ class SecurityOpsAPITester:
         else:
             all_tests_passed = False
         
-        # Test 3: Duplicate employee ID
-        # First create a valid employee
+        # Test 3: Invalid employee creation (missing required field)
         test_employee = {
-            "employee_id": "DUPLICATE_TEST",
             "first_name": "First",
             "last_name": "Employee",
             "employment_status": "active"
         }
         
         success3, response3 = self.run_test(
-            "Create Employee - Original",
+            "Create Employee - Valid for Duplicate Test",
             "POST",
             "/employees",
             201,
@@ -546,25 +856,46 @@ class SecurityOpsAPITester:
         
         if success3:
             created_id = response3.get('id')
+            created_employee_id = response3.get('employee_id') 
             
-            # Try to create another with same employee_id
-            success4, _ = self.run_test(
-                "Create Employee - Duplicate ID",
+            self.log(f"   First employee created: {created_employee_id}")
+            
+            # Try to create another with same data to test auto-increment
+            success4, response4 = self.run_test(
+                "Create Employee - Second (should get different auto-ID)",
                 "POST",
                 "/employees",
-                400,  # Bad request for duplicate
+                201,
                 data=test_employee
             )
             
             if success4:
-                self.log("   ✅ Validation correctly rejects duplicate employee ID")
+                second_employee_id = response4.get('employee_id')
+                second_created_id = response4.get('id')
+                
+                self.log(f"   Second employee created: {second_employee_id}")
+                
+                if created_employee_id != second_employee_id:
+                    self.log("   ✅ Auto-increment working correctly")
+                else:
+                    self.log("   ❌ Auto-increment failed - duplicate IDs generated")
+                    all_tests_passed = False
+                    
+                # Cleanup second employee
+                if second_created_id:
+                    self.run_test(
+                        "Cleanup Second Test Employee",
+                        "DELETE",
+                        f"/employees/{second_created_id}",
+                        200
+                    )
             else:
                 all_tests_passed = False
             
             # Cleanup - delete the test employee
             if created_id:
                 self.run_test(
-                    "Cleanup Duplicate Test Employee",
+                    "Cleanup First Test Employee",
                     "DELETE",
                     f"/employees/{created_id}",
                     200
@@ -594,6 +925,9 @@ class SecurityOpsAPITester:
         # Run employee tests
         test_results.append(("Employee CRUD Operations", self.test_employees_crud()))
         test_results.append(("Employee Validation", self.test_employee_validation()))
+        test_results.append(("Bank Details CRUD", self.test_bank_details_crud()))
+        test_results.append(("Referees CRUD", self.test_referees_crud()))
+        test_results.append(("Next of Kin CRUD", self.test_next_of_kin_crud()))
         
         # Logout last
         test_results.append(("User Logout", self.test_logout()))

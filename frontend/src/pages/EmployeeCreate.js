@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from '../components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import { ArrowLeft, Loader2, Save } from 'lucide-react';
+import { ArrowLeft, Loader2, Save, Info } from 'lucide-react';
 import { toast } from 'sonner';
 
 const EmployeeCreate = () => {
@@ -23,8 +23,6 @@ const EmployeeCreate = () => {
   const [errors, setErrors] = useState({});
 
   const [formData, setFormData] = useState({
-    employee_id: '',
-    guard_no: '',
     first_name: '',
     middle_name: '',
     last_name: '',
@@ -55,7 +53,6 @@ const EmployeeCreate = () => {
 
   const validate = () => {
     const newErrors = {};
-    if (!formData.employee_id.trim()) newErrors.employee_id = 'Employee ID is required';
     if (!formData.first_name.trim()) newErrors.first_name = 'First name is required';
     if (!formData.last_name.trim()) newErrors.last_name = 'Last name is required';
     if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
@@ -71,7 +68,6 @@ const EmployeeCreate = () => {
 
     setLoading(true);
     try {
-      // Clean up empty strings to null
       const payload = {};
       for (const [key, value] of Object.entries(formData)) {
         if (value !== '' && value !== null) {
@@ -80,7 +76,7 @@ const EmployeeCreate = () => {
       }
 
       const response = await api.post('/employees', payload);
-      toast.success('Employee created successfully');
+      toast.success(`Employee created with ID: ${response.data.employee_id}`);
       navigate(`/employees/${response.data.id}`);
     } catch (error) {
       const message = error.response?.data?.detail || 'Failed to create employee';
@@ -105,6 +101,15 @@ const EmployeeCreate = () => {
         </div>
       </div>
 
+      {/* Auto-generated IDs notice */}
+      <div className="flex items-start gap-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+        <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+        <div className="text-sm">
+          <p className="font-medium text-blue-900">Employee ID and Guard Number will be auto-generated</p>
+          <p className="text-blue-700">The system will automatically assign unique IDs upon creation.</p>
+        </div>
+      </div>
+
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Basic Information */}
         <Card>
@@ -112,32 +117,6 @@ const EmployeeCreate = () => {
             <CardTitle className="text-lg">Basic Information</CardTitle>
           </CardHeader>
           <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="employee_id">Employee ID *</Label>
-              <Input
-                id="employee_id"
-                value={formData.employee_id}
-                onChange={(e) => handleChange('employee_id', e.target.value)}
-                placeholder="EMP001"
-                className={errors.employee_id ? 'border-red-500' : ''}
-                data-testid="input-employee-id"
-              />
-              {errors.employee_id && (
-                <p className="text-sm text-red-500">{errors.employee_id}</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="guard_no">Guard Number</Label>
-              <Input
-                id="guard_no"
-                value={formData.guard_no}
-                onChange={(e) => handleChange('guard_no', e.target.value)}
-                placeholder="G001"
-                data-testid="input-guard-no"
-              />
-            </div>
-
             <div className="space-y-2">
               <Label htmlFor="first_name">First Name *</Label>
               <Input
