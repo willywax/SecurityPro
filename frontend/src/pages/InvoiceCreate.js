@@ -237,7 +237,7 @@ const InvoiceCreate = () => {
 
     setLoadingSites(true);
     try {
-      const r = await api.get(`/sites?client_id=${clientId}&page_size=100&status=active`);
+      const r = await api.get(`/sites?client_id=${clientId}&page_size=100&status_filter=active`);
       const loadedSites = r.data.sites || [];
       setSites(loadedSites.map(s => ({
         site_id: s.id,

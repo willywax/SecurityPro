@@ -434,7 +434,7 @@ const IssuancesTab = ({ assetId, assetStatus, onAssetStatusChange, api }) => {
       };
       if (returnForm.return_condition) payload.return_condition = returnForm.return_condition;
 
-      await api.put(`/assets/${assetId}/issuances/${returningIssuance.id}/return`, payload);
+      await api.put(`/assets/issuances/${returningIssuance.id}/return`, payload);
       toast.success(returnForm.lost ? 'Asset marked as lost' : 'Asset returned successfully');
       setReturnDialogOpen(false);
       fetchIssuances();

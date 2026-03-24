@@ -1,7 +1,14 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
-
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import api, {
+  API_BASE_URL,
+  clearTokens,
+  getAccessToken,
+  getRefreshToken,
+  setUnauthorizedHandler,
+  storeTokens,
+  getErrorMessage,
+} from '@/lib/api';
+import { decodeJwt } from '@/utils/jwt';
 
 const AuthContext = createContext(null);
 
@@ -19,73 +26,34 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Get stored tokens
-  const getAccessToken = () => localStorage.getItem('access_token');
-  const getRefreshToken = () => localStorage.getItem('refresh_token');
+  const resetAuthState = useCallback(() => {
+    clearTokens();
+    setUser(null);
+    setOrganization(null);
+    document.documentElement.style.setProperty('--org-accent-color', '#3B82F6');
+  }, []);
 
-  // Store tokens
-  const storeTokens = (accessToken, refreshToken) => {
-    localStorage.setItem('access_token', accessToken);
-    if (refreshToken) {
-      localStorage.setItem('refresh_token', refreshToken);
+  const applyOrgTheme = useCallback((org) => {
+    if (org?.accent_color) {
+      document.documentElement.style.setProperty('--org-accent-color', org.accent_color);
     }
-  };
+  }, []);
 
-  // Clear tokens
-  const clearTokens = () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-  };
+  const hydrateTokenClaims = useCallback((token) => {
+    const decoded = decodeJwt(token);
 
-  // Create axios instance with interceptors
-  const api = axios.create({
-    baseURL: `${API_URL}/api`,
-  });
-
-  // Request interceptor to add token
-  api.interceptors.request.use(
-    (config) => {
-      const token = getAccessToken();
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
-      return config;
-    },
-    (error) => Promise.reject(error)
-  );
-
-  // Response interceptor for token refresh
-  api.interceptors.response.use(
-    (response) => response,
-    async (error) => {
-      const originalRequest = error.config;
-
-      if (error.response?.status === 401 && !originalRequest._retry) {
-        originalRequest._retry = true;
-
-        const refreshToken = getRefreshToken();
-        if (refreshToken) {
-          try {
-            const response = await axios.post(`${API_URL}/api/auth/refresh`, {
-              refresh_token: refreshToken,
-            });
-            const { access_token } = response.data;
-            storeTokens(access_token, null);
-            originalRequest.headers.Authorization = `Bearer ${access_token}`;
-            return api(originalRequest);
-          } catch (refreshError) {
-            clearTokens();
-            setUser(null);
-            setOrganization(null);
-            window.location.href = '/login';
-          }
-        }
-      }
-      return Promise.reject(error);
+    if (!decoded) {
+      return null;
     }
-  );
 
-  // Fetch current user
+    return {
+      id: decoded.sub,
+      email: decoded.email,
+      role: decoded.role,
+      org_id: decoded.org_id,
+    };
+  }, []);
+
   const fetchUser = useCallback(async () => {
     const token = getAccessToken();
     if (!token) {
@@ -94,36 +62,44 @@ export const AuthProvider = ({ children }) => {
     }
 
     try {
-      const response = await api.get('/auth/me');
-      setUser(response.data);
-      setOrganization(response.data.organization);
-      
-      // Apply org accent color
-      if (response.data.organization?.accent_color) {
-        document.documentElement.style.setProperty(
-          '--org-accent-color',
-          response.data.organization.accent_color
-        );
+      const userResponse = await api.get('/auth/me');
+      const claims = hydrateTokenClaims(token);
+      const currentUser = {
+        ...userResponse.data,
+        role: userResponse.data.role || claims?.role,
+        org_id: userResponse.data.org_id || claims?.org_id,
+      };
+      setUser(currentUser);
+
+      try {
+        const orgResponse = await api.get('/organization');
+        setOrganization(orgResponse.data);
+        applyOrgTheme(orgResponse.data);
+      } catch {
+        setOrganization(claims?.org_id ? { id: claims.org_id } : null);
       }
     } catch (err) {
-      clearTokens();
-      setUser(null);
-      setOrganization(null);
+      resetAuthState();
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [applyOrgTheme, hydrateTokenClaims, resetAuthState]);
 
-  // Initialize auth state
   useEffect(() => {
-    fetchUser();
-  }, [fetchUser]);
+    setUnauthorizedHandler(() => {
+      resetAuthState();
+      if (window.location.pathname !== '/login') {
+        window.location.assign('/login');
+      }
+    });
 
-  // Login function
+    fetchUser();
+  }, [fetchUser, resetAuthState]);
+
   const login = async (email, password, rememberMe = false) => {
     setError(null);
     try {
-      const response = await axios.post(`${API_URL}/api/auth/login`, {
+      const response = await api.post('/auth/login', {
         email,
         password,
         remember_me: rememberMe,
@@ -131,56 +107,57 @@ export const AuthProvider = ({ children }) => {
 
       const { access_token, refresh_token, user: userData } = response.data;
       storeTokens(access_token, refresh_token);
-      setUser(userData);
-      setOrganization(userData.organization);
+      const claims = hydrateTokenClaims(access_token);
+      const nextUser = {
+        ...userData,
+        role: userData.role || claims?.role,
+        org_id: userData.org_id || claims?.org_id,
+      };
 
-      // Apply org accent color
-      if (userData.organization?.accent_color) {
-        document.documentElement.style.setProperty(
-          '--org-accent-color',
-          userData.organization.accent_color
-        );
+      setUser(nextUser);
+
+      let org = null;
+      try {
+        const orgResponse = await api.get('/organization');
+        org = orgResponse.data;
+      } catch {
+        org = claims?.org_id ? { id: claims.org_id } : null;
       }
+      setOrganization(org);
+      applyOrgTheme(org);
 
       return { success: true };
     } catch (err) {
-      const message = err.response?.data?.detail || 'Login failed';
+      const message = getErrorMessage(err, 'Login failed');
       setError(message);
       return { success: false, error: message };
     }
   };
 
-  // Logout function
   const logout = async () => {
     try {
       await api.post('/auth/logout');
     } catch (err) {
-      // Ignore logout errors
     } finally {
-      clearTokens();
-      setUser(null);
-      setOrganization(null);
-      // Reset accent color to default
-      document.documentElement.style.setProperty('--org-accent-color', '#3B82F6');
+      resetAuthState();
     }
   };
 
-  // Forgot password function
   const forgotPassword = async (email) => {
     setError(null);
     try {
-      const response = await axios.post(`${API_URL}/api/auth/forgot-password`, {
+      const response = await api.post('/auth/forgot-password', {
         email,
       });
       return { success: true, message: response.data.message };
     } catch (err) {
-      const message = err.response?.data?.detail || 'Request failed';
+      const message = getErrorMessage(err, 'Request failed');
       setError(message);
       return { success: false, error: message };
     }
   };
 
-  const value = {
+  const value = useMemo(() => ({
     user,
     organization,
     loading,
@@ -188,9 +165,10 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     forgotPassword,
-    isAuthenticated: !!user,
+    isAuthenticated: Boolean(getAccessToken()),
     api,
-  };
+    apiBaseUrl: API_BASE_URL,
+  }), [user, organization, loading, error]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

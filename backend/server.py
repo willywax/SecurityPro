@@ -51,6 +51,15 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# CORS must be registered before any mounts/routes so it wraps the full app
+app.add_middleware(
+    CORSMiddleware,
+    allow_credentials=True,
+    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Mount static files for uploads
 uploads_dir = ROOT_DIR / "uploads"
 uploads_dir.mkdir(exist_ok=True)
@@ -110,14 +119,6 @@ api_router.include_router(invoices.router)
 
 # Include the router in the main app
 app.include_router(api_router)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 # Configure logging
 logging.basicConfig(

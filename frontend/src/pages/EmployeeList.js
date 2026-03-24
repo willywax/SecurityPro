@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import {
@@ -20,18 +20,9 @@ import {
 } from '../components/ui/table';
 import { Badge } from '../components/ui/badge';
 import { Card, CardContent } from '../components/ui/card';
-import {
-  Search,
-  Plus,
-  ChevronLeft,
-  ChevronRight,
-  User,
-  Phone,
-  Mail,
-  Loader2,
-} from 'lucide-react';
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+import { Search, Plus, ChevronLeft, ChevronRight, User, Phone, Mail, Loader2 } from 'lucide-react';
+import employeeService from '@/services/employeeService';
+import { API_BASE_URL } from '@/lib/api';
 
 const statusColors = {
   active: 'bg-emerald-100 text-emerald-700 border-emerald-200',
@@ -47,113 +38,70 @@ const statusLabels = {
   on_leave: 'On Leave',
 };
 
-// Avatar component with photo or initials fallback
 const EmployeeAvatar = ({ employee, size = 'md' }) => {
   const sizeClasses = {
     sm: 'w-8 h-8 text-xs',
     md: 'w-10 h-10 text-sm',
     lg: 'w-12 h-12 text-base',
   };
-  
-  const getInitials = () => {
-    const first = employee.first_name?.[0] || '';
-    const last = employee.last_name?.[0] || '';
-    return (first + last).toUpperCase();
-  };
-  
-  // Generate consistent background color based on name
-  const getAvatarColor = () => {
-    const colors = [
-      'bg-blue-500', 'bg-emerald-500', 'bg-amber-500', 'bg-rose-500',
-      'bg-purple-500', 'bg-cyan-500', 'bg-indigo-500', 'bg-teal-500'
-    ];
-    const index = (employee.first_name?.charCodeAt(0) || 0) % colors.length;
-    return colors[index];
-  };
-  
+  const initials = `${employee.first_name?.[0] || ''}${employee.last_name?.[0] || ''}`.toUpperCase();
+  const colors = ['bg-blue-500', 'bg-emerald-500', 'bg-amber-500', 'bg-rose-500', 'bg-cyan-500', 'bg-indigo-500'];
+  const background = colors[(employee.first_name?.charCodeAt(0) || 0) % colors.length];
+
   if (employee.profile_photo) {
-    return (
-      <img
-        src={`${BACKEND_URL}${employee.profile_photo}`}
-        alt={employee.full_name}
-        className={`${sizeClasses[size]} rounded-full object-cover flex-shrink-0`}
-      />
-    );
+    const src = employee.profile_photo.startsWith('http')
+      ? employee.profile_photo
+      : `${API_BASE_URL}${employee.profile_photo}`;
+
+    return <img src={src} alt={employee.full_name} className={`${sizeClasses[size]} rounded-full object-cover flex-shrink-0`} />;
   }
-  
+
   return (
-    <div className={`${sizeClasses[size]} ${getAvatarColor()} rounded-full flex items-center justify-center flex-shrink-0`}>
-      <span className="font-medium text-white">{getInitials()}</span>
+    <div className={`${sizeClasses[size]} ${background} rounded-full flex items-center justify-center flex-shrink-0`}>
+      <span className="font-medium text-white">{initials}</span>
     </div>
   );
 };
 
 const EmployeeList = () => {
-  const { api } = useAuth();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  
-  const [employees, setEmployees] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [pagination, setPagination] = useState({
-    total: 0,
-    page: 1,
-    pageSize: 10,
-    totalPages: 1,
-  });
-  
   const [search, setSearch] = useState(searchParams.get('search') || '');
-  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all');
   const [debouncedSearch, setDebouncedSearch] = useState(search);
+  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all');
+  const [page, setPage] = useState(Number(searchParams.get('page') || 1));
+  const pageSize = 10;
 
-  // Debounce search
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(search), 300);
-    return () => clearTimeout(timer);
+    const timer = window.setTimeout(() => setDebouncedSearch(search), 300);
+    return () => window.clearTimeout(timer);
   }, [search]);
 
-  // Fetch employees
-  const fetchEmployees = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      params.set('page', pagination.page.toString());
-      params.set('page_size', pagination.pageSize.toString());
-      if (debouncedSearch) params.set('search', debouncedSearch);
-      if (statusFilter && statusFilter !== 'all') params.set('status', statusFilter);
-      
-      const response = await api.get(`/employees?${params.toString()}`);
-      setEmployees(response.data.employees);
-      setPagination(prev => ({
-        ...prev,
-        total: response.data.total,
-        totalPages: response.data.total_pages,
-      }));
-    } catch (error) {
-      console.error('Failed to fetch employees:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [api, pagination.page, pagination.pageSize, debouncedSearch, statusFilter]);
-
-  useEffect(() => {
-    fetchEmployees();
-  }, [fetchEmployees]);
-
-  // Update URL params
   useEffect(() => {
     const params = new URLSearchParams();
     if (search) params.set('search', search);
-    if (statusFilter && statusFilter !== 'all') params.set('status', statusFilter);
+    if (statusFilter !== 'all') params.set('status', statusFilter);
+    if (page > 1) params.set('page', String(page));
     setSearchParams(params);
-  }, [search, statusFilter, setSearchParams]);
+  }, [page, search, setSearchParams, statusFilter]);
 
-  const handlePageChange = (newPage) => {
-    setPagination(prev => ({ ...prev, page: newPage }));
-  };
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ['employees', { page, pageSize, search: debouncedSearch, statusFilter }],
+    queryFn: () =>
+      employeeService.getAll({
+        page,
+        page_size: pageSize,
+        search: debouncedSearch || undefined,
+        status_filter: statusFilter !== 'all' ? statusFilter : undefined,
+      }),
+  });
+
+  const employees = data?.data || [];
+  const total = data?.total || 0;
+  const totalPages = data?.totalPages || 1;
 
   return (
     <div className="space-y-6" data-testid="employees-page">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Employees</h1>
@@ -167,17 +115,16 @@ const EmployeeList = () => {
         </Link>
       </div>
 
-      {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <Input
             type="search"
-            placeholder="Search by name, email, ID..."
+            placeholder="Search by name, phone, ID..."
             value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPagination(prev => ({ ...prev, page: 1 }));
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setPage(1);
             }}
             className="pl-9"
             data-testid="input-search-employees"
@@ -187,7 +134,7 @@ const EmployeeList = () => {
           value={statusFilter}
           onValueChange={(value) => {
             setStatusFilter(value);
-            setPagination(prev => ({ ...prev, page: 1 }));
+            setPage(1);
           }}
         >
           <SelectTrigger className="w-full sm:w-[180px]" data-testid="select-status-filter">
@@ -203,13 +150,17 @@ const EmployeeList = () => {
         </Select>
       </div>
 
-      {/* Loading State */}
-      {loading ? (
+      {isLoading ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
         </div>
+      ) : isError ? (
+        <Card className="border-red-200">
+          <CardContent className="py-12 text-center text-red-600">
+            {error?.response?.data?.detail || 'Failed to load employees'}
+          </CardContent>
+        </Card>
       ) : employees.length === 0 ? (
-        /* Empty State */
         <Card className="border-dashed">
           <CardContent className="py-12 text-center">
             <User className="w-12 h-12 text-slate-300 mx-auto mb-4" />
@@ -231,7 +182,6 @@ const EmployeeList = () => {
         </Card>
       ) : (
         <>
-          {/* Desktop Table */}
           <div className="hidden md:block bg-white rounded-lg border border-slate-200 overflow-hidden">
             <Table>
               <TableHeader>
@@ -239,7 +189,7 @@ const EmployeeList = () => {
                   <TableHead className="font-semibold">Employee</TableHead>
                   <TableHead className="font-semibold">ID / Guard No</TableHead>
                   <TableHead className="font-semibold">Contact</TableHead>
-                  <TableHead className="font-semibold">Job Title</TableHead>
+                  <TableHead className="font-semibold">Address</TableHead>
                   <TableHead className="font-semibold">Status</TableHead>
                 </TableRow>
               </TableHeader>
@@ -248,7 +198,7 @@ const EmployeeList = () => {
                   <TableRow
                     key={employee.id}
                     className="hover:bg-slate-50 cursor-pointer"
-                    onClick={() => window.location.href = `/employees/${employee.id}`}
+                    onClick={() => navigate(`/employees/${employee.id}`)}
                     data-testid={`employee-row-${employee.id}`}
                   >
                     <TableCell>
@@ -256,34 +206,19 @@ const EmployeeList = () => {
                         <EmployeeAvatar employee={employee} size="md" />
                         <div>
                           <p className="font-medium text-slate-900">{employee.full_name}</p>
-                          {employee.email && (
-                            <p className="text-sm text-slate-500">{employee.email}</p>
-                          )}
+                          {employee.email && <p className="text-sm text-slate-500">{employee.email}</p>}
                         </div>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div>
-                        <p className="text-slate-900">{employee.employee_id}</p>
-                        {employee.guard_no && (
-                          <p className="text-sm text-slate-500">Guard #{employee.guard_no}</p>
-                        )}
-                      </div>
+                      <p className="text-slate-900">{employee.employee_id}</p>
+                      {employee.guard_no && <p className="text-sm text-slate-500">Guard #{employee.guard_no}</p>}
                     </TableCell>
+                    <TableCell>{employee.phone_1 ? <p className="text-slate-600">{employee.phone_1}</p> : '-'}</TableCell>
+                    <TableCell className="text-slate-600">{employee.address || '-'}</TableCell>
                     <TableCell>
-                      {employee.phone_1 && (
-                        <p className="text-slate-600">{employee.phone_1}</p>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <p className="text-slate-600">{employee.job_title || '-'}</p>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={statusColors[employee.employment_status]}
-                      >
-                        {statusLabels[employee.employment_status]}
+                      <Badge variant="outline" className={statusColors[employee.employment_status]}>
+                        {statusLabels[employee.employment_status] || employee.employment_status}
                       </Badge>
                     </TableCell>
                   </TableRow>
@@ -292,15 +227,9 @@ const EmployeeList = () => {
             </Table>
           </div>
 
-          {/* Mobile Card Layout */}
           <div className="md:hidden space-y-3">
             {employees.map((employee) => (
-              <Link
-                key={employee.id}
-                to={`/employees/${employee.id}`}
-                className="block"
-                data-testid={`employee-card-${employee.id}`}
-              >
+              <Link key={employee.id} to={`/employees/${employee.id}`} className="block" data-testid={`employee-card-${employee.id}`}>
                 <Card className="hover:border-slate-300 transition-colors">
                   <CardContent className="p-4">
                     <div className="flex items-start gap-3">
@@ -311,17 +240,12 @@ const EmployeeList = () => {
                             <p className="font-medium text-slate-900 truncate">{employee.full_name}</p>
                             <p className="text-sm text-slate-500">{employee.employee_id}</p>
                           </div>
-                          <Badge
-                            variant="outline"
-                            className={`${statusColors[employee.employment_status]} flex-shrink-0`}
-                          >
-                            {statusLabels[employee.employment_status]}
+                          <Badge variant="outline" className={`${statusColors[employee.employment_status]} flex-shrink-0`}>
+                            {statusLabels[employee.employment_status] || employee.employment_status}
                           </Badge>
                         </div>
                         <div className="mt-2 space-y-1">
-                          {employee.job_title && (
-                            <p className="text-sm text-slate-600">{employee.job_title}</p>
-                          )}
+                          <p className="text-sm text-slate-600">{employee.address || '-'}</p>
                           <div className="flex flex-wrap gap-3 text-sm text-slate-500">
                             {employee.phone_1 && (
                               <span className="flex items-center gap-1">
@@ -345,34 +269,17 @@ const EmployeeList = () => {
             ))}
           </div>
 
-          {/* Pagination */}
-          {pagination.totalPages > 1 && (
+          {totalPages > 1 && (
             <div className="flex items-center justify-between">
               <p className="text-sm text-slate-500">
-                Showing {(pagination.page - 1) * pagination.pageSize + 1} to{' '}
-                {Math.min(pagination.page * pagination.pageSize, pagination.total)} of{' '}
-                {pagination.total} employees
+                Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, total)} of {total} employees
               </p>
               <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handlePageChange(pagination.page - 1)}
-                  disabled={pagination.page <= 1}
-                  data-testid="btn-prev-page"
-                >
+                <Button variant="outline" size="sm" onClick={() => setPage((value) => value - 1)} disabled={page <= 1} data-testid="btn-prev-page">
                   <ChevronLeft className="w-4 h-4" />
                 </Button>
-                <span className="text-sm text-slate-600 min-w-[100px] text-center">
-                  Page {pagination.page} of {pagination.totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handlePageChange(pagination.page + 1)}
-                  disabled={pagination.page >= pagination.totalPages}
-                  data-testid="btn-next-page"
-                >
+                <span className="text-sm text-slate-600 min-w-[100px] text-center">Page {page} of {totalPages}</span>
+                <Button variant="outline" size="sm" onClick={() => setPage((value) => value + 1)} disabled={page >= totalPages} data-testid="btn-next-page">
                   <ChevronRight className="w-4 h-4" />
                 </Button>
               </div>

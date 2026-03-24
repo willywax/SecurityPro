@@ -41,19 +41,18 @@ class EmployeeCreate(BaseModel):
     gender: Optional[Gender] = None
     date_of_birth: Optional[date] = None
     marital_status: Optional[MaritalStatus] = None
+    nationality: Optional[str] = None
+    nin: Optional[str] = None
     phone_1: str
     phone_2: Optional[str] = None
     email: Optional[EmailStr] = None
-    address: Optional[str] = None
-    emergency_contact_name: Optional[str] = None
-    emergency_contact_phone: Optional[str] = None
+    physical_address: Optional[str] = None
+    postal_address: Optional[str] = None
+    education_background: Optional[str] = None
+    job_title: Optional[str] = None
     employment_status: EmploymentStatus = EmploymentStatus.ACTIVE
-    date_joined: Optional[date] = None
-    date_left: Optional[date] = None
-    id_type: Optional[IDType] = None
-    id_number: Optional[str] = None
-    nssf_number: Optional[str] = None
-    tin_number: Optional[str] = None
+    hire_date: Optional[date] = None
+    termination_date: Optional[date] = None
     notes: Optional[str] = None
 
 
@@ -64,19 +63,18 @@ class EmployeeUpdate(BaseModel):
     gender: Optional[Gender] = None
     date_of_birth: Optional[date] = None
     marital_status: Optional[MaritalStatus] = None
+    nationality: Optional[str] = None
+    nin: Optional[str] = None
     phone_1: Optional[str] = None
     phone_2: Optional[str] = None
     email: Optional[EmailStr] = None
-    address: Optional[str] = None
-    emergency_contact_name: Optional[str] = None
-    emergency_contact_phone: Optional[str] = None
+    physical_address: Optional[str] = None
+    postal_address: Optional[str] = None
+    education_background: Optional[str] = None
+    job_title: Optional[str] = None
     employment_status: Optional[EmploymentStatus] = None
-    date_joined: Optional[date] = None
-    date_left: Optional[date] = None
-    id_type: Optional[IDType] = None
-    id_number: Optional[str] = None
-    nssf_number: Optional[str] = None
-    tin_number: Optional[str] = None
+    hire_date: Optional[date] = None
+    termination_date: Optional[date] = None
     notes: Optional[str] = None
 
 
@@ -92,19 +90,18 @@ class EmployeeResponse(BaseModel):
     gender: Optional[Gender] = None
     date_of_birth: Optional[date] = None
     marital_status: Optional[MaritalStatus] = None
+    nationality: Optional[str] = None
+    nin: Optional[str] = None
     phone_1: str
     phone_2: Optional[str] = None
     email: Optional[EmailStr] = None
-    address: Optional[str] = None
-    emergency_contact_name: Optional[str] = None
-    emergency_contact_phone: Optional[str] = None
+    physical_address: Optional[str] = None
+    postal_address: Optional[str] = None
+    education_background: Optional[str] = None
+    job_title: Optional[str] = None
     employment_status: EmploymentStatus
-    date_joined: Optional[date] = None
-    date_left: Optional[date] = None
-    id_type: Optional[IDType] = None
-    id_number: Optional[str] = None
-    nssf_number: Optional[str] = None
-    tin_number: Optional[str] = None
+    hire_date: Optional[date] = None
+    termination_date: Optional[date] = None
     notes: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
@@ -145,23 +142,29 @@ class BankAccountResponse(BaseModel):
 
 # Referee Schemas
 class RefereeCreate(BaseModel):
-    name: str
+    full_name: str
     referee_relationship: str
-    phone: str
-    email: Optional[EmailStr] = None
-    organization: Optional[str] = None
-    position: Optional[str] = None
+    phone_number: str
+    alternate_phone: Optional[str] = None
+    id_type: Optional[IDType] = None
+    id_number: Optional[str] = None
+    address: Optional[str] = None
+    occupation: Optional[str] = None
+    notes: Optional[str] = None
 
 
 class RefereeResponse(BaseModel):
     id: UUID
     employee_id: UUID
-    name: str
+    full_name: str
     referee_relationship: str
-    phone: str
-    email: Optional[EmailStr] = None
-    organization: Optional[str] = None
-    position: Optional[str] = None
+    phone_number: str
+    alternate_phone: Optional[str] = None
+    id_type: Optional[IDType] = None
+    id_number: Optional[str] = None
+    address: Optional[str] = None
+    occupation: Optional[str] = None
+    notes: Optional[str] = None
     created_at: datetime
 
     class Config:
@@ -170,25 +173,27 @@ class RefereeResponse(BaseModel):
 
 # Next of Kin Schemas
 class NextOfKinCreate(BaseModel):
-    name: str
+    full_name: str
     kin_relationship: str
-    phone: str
-    email: Optional[EmailStr] = None
+    phone_1: str
+    phone_2: Optional[str] = None
     address: Optional[str] = None
     id_type: Optional[IDType] = None
     id_number: Optional[str] = None
+    notes: Optional[str] = None
 
 
 class NextOfKinResponse(BaseModel):
     id: UUID
     employee_id: UUID
-    name: str
+    full_name: str
     kin_relationship: str
-    phone: str
-    email: Optional[EmailStr] = None
+    phone_1: str
+    phone_2: Optional[str] = None
     address: Optional[str] = None
     id_type: Optional[IDType] = None
     id_number: Optional[str] = None
+    notes: Optional[str] = None
     created_at: datetime
 
     class Config:
@@ -212,14 +217,15 @@ class ContractResponse(BaseModel):
     contract_type: str
     start_date: date
     end_date: Optional[date] = None
-    salary: float
-    allowances: float
+    salary: Optional[float] = Field(None, alias='salary_amount')
+    allowances: float = 0.0
     status: ContractStatus
     notes: Optional[str] = None
     created_at: datetime
 
     class Config:
         from_attributes = True
+        populate_by_name = True
 
 
 # Document Schemas
@@ -256,16 +262,17 @@ class EmploymentHistoryCreate(BaseModel):
 class EmploymentHistoryResponse(BaseModel):
     id: UUID
     employee_id: UUID
-    employer: str
-    position: str
+    employer: Optional[str] = Field(None, alias='employer_name')
+    position: Optional[str] = Field(None, alias='job_title')
     start_date: date
     end_date: Optional[date] = None
-    responsibilities: Optional[str] = None
+    responsibilities: Optional[str] = Field(None, alias='notes')
     reason_for_leaving: Optional[str] = None
     created_at: datetime
 
     class Config:
         from_attributes = True
+        populate_by_name = True
 
 
 class MessageResponse(BaseModel):
@@ -742,12 +749,23 @@ async def add_contract(
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
 
-    # Create contract
+    # Generate contract number
+    count_result = await db.execute(
+        select(func.count()).select_from(EmployeeContract).where(EmployeeContract.org_id == org_id)
+    )
+    count = (count_result.scalar_one() or 0) + 1
+
+    # Create contract (map schema fields to model columns)
     new_contract = EmployeeContract(
         org_id=org_id,
         employee_id=employee_id,
         created_by=user_id,
-        **contract.model_dump()
+        contract_number=f"CON{count:04d}",
+        contract_type=contract.contract_type,
+        start_date=contract.start_date,
+        end_date=contract.end_date,
+        salary_amount=contract.salary,
+        status=contract.status,
     )
 
     db.add(new_contract)
@@ -799,10 +817,12 @@ async def update_contract(
     if not contract:
         raise HTTPException(status_code=404, detail="Contract not found")
 
-    # Update fields
-    update_data = contract_update.model_dump()
-    for field, value in update_data.items():
-        setattr(contract, field, value)
+    # Update fields (map schema names to model column names)
+    contract.contract_type = contract_update.contract_type
+    contract.start_date = contract_update.start_date
+    contract.end_date = contract_update.end_date
+    contract.salary_amount = contract_update.salary
+    contract.status = contract_update.status
 
     await db.commit()
     await db.refresh(contract)
@@ -951,12 +971,17 @@ async def add_employment_history(
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
 
-    # Create employment history
+    # Create employment history (map schema fields to model columns)
     new_history = EmploymentHistory(
         org_id=org_id,
         employee_id=employee_id,
         created_by=user_id,
-        **history.model_dump()
+        employer_name=history.employer,
+        job_title=history.position,
+        start_date=history.start_date,
+        end_date=history.end_date,
+        notes=history.responsibilities,
+        reason_for_leaving=history.reason_for_leaving,
     )
 
     db.add(new_history)

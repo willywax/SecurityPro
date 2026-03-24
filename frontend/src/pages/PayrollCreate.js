@@ -58,7 +58,7 @@ const SingleEntryForm = ({ api, onSuccess }) => {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    api.get('/employees?page_size=100&status=active')
+    api.get('/employees?page_size=100&status_filter=active')
       .then(r => setEmployees(r.data.employees || []))
       .catch(() => {});
   }, [api]);
@@ -259,7 +259,7 @@ const BulkEntryForm = ({ api, onSuccess }) => {
     if (!month) return;
     setLoadingEmployees(true);
     try {
-      const r = await api.get('/employees?page_size=100&status=active');
+      const r = await api.get('/employees?page_size=100&status_filter=active');
       const emps = r.data.employees || [];
       setRows(emps.map(e => ({
         employee_id: e.id,

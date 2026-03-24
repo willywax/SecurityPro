@@ -52,10 +52,13 @@ function App() {
             <Route path="/employees/new" element={<EmployeeCreate />} />
             <Route path="/employees/:id" element={<EmployeeDetail />} />
             <Route path="/clients" element={<ClientList />} />
+            <Route path="/clients/new" element={<ClientDetail />} />
             <Route path="/clients/:id" element={<ClientDetail />} />
             <Route path="/sites" element={<SiteList />} />
+            <Route path="/sites/new" element={<SiteDetail />} />
             <Route path="/sites/:id" element={<SiteDetail />} />
             <Route path="/assets" element={<AssetList />} />
+            <Route path="/assets/new" element={<AssetDetail />} />
             <Route path="/assets/:id" element={<AssetDetail />} />
             <Route path="/payroll" element={<PayrollList />} />
             <Route path="/payroll/new" element={<PayrollCreate />} />
