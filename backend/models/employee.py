@@ -1,5 +1,5 @@
 """Employee and related models."""
-from sqlalchemy import Column, String, Date, ForeignKey, Enum as SQLEnum, Boolean, Integer, Float
+from sqlalchemy import Column, String, Text, Date, ForeignKey, Enum as SQLEnum, Boolean, Integer, Float
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
 from models.base import BaseModel
@@ -149,7 +149,7 @@ class EmployeeContract(BaseModel):
 
     employee_id = Column(UUID(as_uuid=True), ForeignKey("employees.id", ondelete="CASCADE"), nullable=False, index=True)
     contract_number = Column(String, nullable=False, index=True)  # CON0001, CON0002, etc.
-    contract_type = Column(SQLEnum(ContractType, name="contract_type", create_type=True), nullable=False)
+    contract_type = Column(SQLEnum(ContractType, name="contract_type", create_type=True), nullable=True)
     start_date = Column(Date, nullable=False)
     end_date = Column(Date, nullable=True)
     duration_months = Column(Integer, nullable=True)
@@ -161,11 +161,18 @@ class EmployeeContract(BaseModel):
     employee_signed = Column(Boolean, default=False, nullable=False)
     employer_signed = Column(Boolean, default=False, nullable=False)
     contract_document_file = Column(String, nullable=True)
+    notes = Column(Text, nullable=True)
     status = Column(
         SQLEnum(ContractStatus, name="contract_status", create_type=True),
-        default=ContractStatus.DRAFT,
+        default=ContractStatus.ACTIVE,
         nullable=False
     )
+    # Termination fields
+    termination_reason = Column(Text, nullable=True)
+    termination_date = Column(Date, nullable=True)
+    terminated_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    auto_expired = Column(Boolean, default=False, nullable=False)
+    superseded_by = Column(UUID(as_uuid=True), ForeignKey("employee_contracts.id", ondelete="SET NULL"), nullable=True)
 
     # Relationships
     employee = relationship("Employee", back_populates="contracts")

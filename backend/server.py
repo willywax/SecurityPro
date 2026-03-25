@@ -21,13 +21,54 @@ from models.organization import Organization
 # Import routers
 from routers import auth
 from routers import employees
+from routers import contracts
 from routers import clients
 from routers import sites
-from routers import assets
 from routers import payrolls
 from routers import invoices
 from routers import zones
 from routers import regions
+from routers import asset_types
+from routers import store
+from routers import inventory
+from routers import issuances
+from routers import write_offs
+
+
+async def run_contract_expiry_check():
+    """Auto-expire contracts whose end_date has passed."""
+    from db.session import AsyncSessionLocal
+    from sqlalchemy import select
+    from models.employee import Employee, EmployeeContract
+    from models.enums import ContractStatus, EmploymentStatus
+    from datetime import date
+
+    async with AsyncSessionLocal() as db:
+        try:
+            today = date.today()
+            result = await db.execute(
+                select(EmployeeContract).where(
+                    EmployeeContract.status == ContractStatus.ACTIVE,
+                    EmployeeContract.end_date < today,
+                )
+            )
+            contracts = result.scalars().all()
+            expired_count = 0
+            for contract in contracts:
+                contract.status = ContractStatus.EXPIRED
+                contract.auto_expired = True
+                emp_result = await db.execute(
+                    select(Employee).where(Employee.id == contract.employee_id)
+                )
+                employee = emp_result.scalar_one_or_none()
+                if employee:
+                    employee.employment_status = EmploymentStatus.INACTIVE
+                expired_count += 1
+            await db.commit()
+            if expired_count:
+                logging.info(f"Auto-expired {expired_count} contract(s) on startup.")
+        except Exception as e:
+            logging.error(f"Contract expiry check error: {e}")
 
 
 @asynccontextmanager
@@ -38,6 +79,9 @@ async def lifespan(app: FastAPI):
         await seed_database()
     except Exception as e:
         logging.error(f"Seeding error: {e}")
+
+    # Run contract expiry check on startup
+    await run_contract_expiry_check()
 
     yield
 
@@ -115,13 +159,18 @@ async def get_organization(
 # Include routers
 api_router.include_router(auth.router)
 api_router.include_router(employees.router)
+api_router.include_router(contracts.router)
 api_router.include_router(clients.router)
 api_router.include_router(sites.router)
-api_router.include_router(assets.router)
 api_router.include_router(payrolls.router)
 api_router.include_router(invoices.router)
 api_router.include_router(zones.router)
 api_router.include_router(regions.router)
+api_router.include_router(asset_types.router)
+api_router.include_router(store.router)
+api_router.include_router(inventory.router)
+api_router.include_router(issuances.router)
+api_router.include_router(write_offs.router)
 
 # Include the router in the main app
 app.include_router(api_router)

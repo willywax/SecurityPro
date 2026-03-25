@@ -83,6 +83,7 @@ class ContractStatus(str, enum.Enum):
     ACTIVE = "active"
     EXPIRED = "expired"
     TERMINATED = "terminated"
+    MUTUAL_TERMINATION = "mutual_termination"
 
 
 # ============ Zone & Region Enums ============

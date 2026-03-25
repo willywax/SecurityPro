@@ -121,10 +121,64 @@ const employeeService = {
     const response = await api.delete(`/employees/${employeeId}/next-of-kin/${kinId}`);
     return unwrapSingleResponse(response);
   },
+  getIssuedAssets: async (employeeId) => {
+    const response = await api.get(`/employees/${employeeId}/issued-assets`);
+    return unwrapSingleResponse(response) || [];
+  },
   getContracts: async (employeeId) => {
     const response = await api.get(`/employees/${employeeId}/contracts`);
     return unwrapSingleResponse(response) || [];
   },
+  getActiveContract: async (employeeId) => {
+    const response = await api.get(`/employees/${employeeId}/active-contract`);
+    return response.data;
+  },
+  createContract: async (employeeId, data) => {
+    const payload = {
+      employee_id: employeeId,
+      start_date: data.start_date,
+      duration_months: Number(data.duration_months),
+      salary_amount: Number(data.salary_amount),
+      job_title_on_contract: data.job_title_on_contract || null,
+      workstation_site: data.workstation_site || null,
+      probation_months: data.probation_months ? Number(data.probation_months) : null,
+      signed_date: data.signed_date || null,
+      employee_signed: Boolean(data.employee_signed),
+      employer_signed: Boolean(data.employer_signed),
+      notes: data.notes || null,
+    };
+    const response = await api.post('/contracts', payload);
+    return response.data;
+  },
+  patchContract: async (contractId, data) => {
+    const response = await api.patch(`/contracts/${contractId}`, data);
+    return response.data;
+  },
+  terminateContract: async (contractId, data) => {
+    const response = await api.post(`/contracts/${contractId}/terminate`, data);
+    return response.data;
+  },
+  renewContract: async (contractId, data) => {
+    const payload = {
+      start_date: data.start_date,
+      duration_months: Number(data.duration_months),
+      salary_amount: Number(data.salary_amount),
+      job_title_on_contract: data.job_title_on_contract || null,
+      workstation_site: data.workstation_site || null,
+      probation_months: data.probation_months ? Number(data.probation_months) : null,
+      signed_date: data.signed_date || null,
+      employee_signed: Boolean(data.employee_signed),
+      employer_signed: Boolean(data.employer_signed),
+      notes: data.notes || null,
+    };
+    const response = await api.post(`/contracts/${contractId}/renew`, payload);
+    return response.data;
+  },
+  runExpiryCheck: async () => {
+    const response = await api.post('/contracts/run-expiry-check');
+    return response.data;
+  },
+  // Legacy - kept for backward compatibility
   saveContract: async (employeeId, data, contractId) => {
     const payload = {
       contract_type: data.contract_type,

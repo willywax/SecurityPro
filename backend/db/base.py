@@ -17,7 +17,10 @@ from models.employee import (  # noqa: F401, E402
 )
 from models.client import Client  # noqa: F401, E402
 from models.site import Site  # noqa: F401, E402
-from models.asset import Asset, AssetIssuance  # noqa: F401, E402
+from models.inventory import (  # noqa: F401, E402
+    AssetType, Store, InventoryItem,
+    InventoryTransaction, InventoryIssuance, WrittenOffRegister,
+)
 from models.payroll import Payroll  # noqa: F401, E402
 from models.zone import Zone, ZoneManager, Region, RegionTransfer  # noqa: F401, E402
 from models.invoice import (  # noqa: F401, E402

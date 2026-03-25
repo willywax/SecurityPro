@@ -20,6 +20,7 @@ from models.employee import (
     EmployeeContract, EmployeeDocument, EmploymentHistory
 )
 from models.enums import Gender, MaritalStatus, EmploymentStatus, IDType, ContractStatus, Relationship
+from models.inventory import InventoryIssuance, InventoryItem, AssetType
 from utils.auth import get_token_data
 
 router = APIRouter(prefix="/employees", tags=["Employees"])
@@ -250,13 +251,25 @@ class ContractCreate(BaseModel):
 class ContractResponse(BaseModel):
     id: UUID
     employee_id: UUID
-    contract_type: str
+    contract_number: Optional[str] = None
+    contract_type: Optional[str] = None
     start_date: date
     end_date: Optional[date] = None
-    salary: Optional[float] = Field(None, alias='salary_amount')
-    allowances: float = 0.0
-    status: ContractStatus
+    duration_months: Optional[int] = None
+    salary_amount: Optional[float] = None
+    job_title_on_contract: Optional[str] = None
+    workstation_site: Optional[str] = None
+    probation_months: Optional[int] = None
+    signed_date: Optional[date] = None
+    employee_signed: bool = False
+    employer_signed: bool = False
     notes: Optional[str] = None
+    status: ContractStatus
+    termination_reason: Optional[str] = None
+    termination_date: Optional[date] = None
+    terminated_by: Optional[UUID] = None
+    auto_expired: bool = False
+    superseded_by: Optional[UUID] = None
     created_at: datetime
 
     class Config:
@@ -313,6 +326,27 @@ class EmploymentHistoryResponse(BaseModel):
 
 class MessageResponse(BaseModel):
     message: str
+
+
+class EmployeeIssuedAssetResponse(BaseModel):
+    id: UUID
+    item_id: UUID
+    item_name: Optional[str] = None
+    asset_type_name: Optional[str] = None
+    quantity_issued: int
+    quantity_returned: int
+    outstanding_quantity: int
+    issue_date: date
+    expected_return_date: Optional[date] = None
+    actual_return_date: Optional[date] = None
+    issue_condition: str
+    return_condition: Optional[str] = None
+    status: str
+    notes: Optional[str] = None
+    is_overdue: bool = False
+
+    class Config:
+        from_attributes = True
 
 
 # ============ HELPERS ============
@@ -375,6 +409,41 @@ async def build_employee_response(employee: Employee, db: AsyncSession) -> dict:
             emp_dict["zone_name"] = zone.zone_name if zone else None
 
     return emp_dict
+
+
+async def build_employee_issued_asset_response(issuance: InventoryIssuance, db: AsyncSession) -> dict:
+    item = (await db.execute(select(InventoryItem).where(InventoryItem.id == issuance.item_id))).scalar_one_or_none()
+    asset_type_name = None
+    item_name = None
+    if item:
+        item_name = item.item_name
+        asset_type = (await db.execute(select(AssetType).where(AssetType.id == item.asset_type_id))).scalar_one_or_none()
+        asset_type_name = asset_type.type_name if asset_type else None
+
+    outstanding_quantity = max(0, issuance.quantity_issued - issuance.quantity_returned)
+    is_overdue = bool(
+        issuance.expected_return_date
+        and issuance.status in ("active", "partially_returned")
+        and issuance.expected_return_date < date.today()
+    )
+
+    return {
+        "id": issuance.id,
+        "item_id": issuance.item_id,
+        "item_name": item_name,
+        "asset_type_name": asset_type_name,
+        "quantity_issued": issuance.quantity_issued,
+        "quantity_returned": issuance.quantity_returned,
+        "outstanding_quantity": outstanding_quantity,
+        "issue_date": issuance.issue_date,
+        "expected_return_date": issuance.expected_return_date,
+        "actual_return_date": issuance.actual_return_date,
+        "issue_condition": issuance.issue_condition,
+        "return_condition": issuance.return_condition,
+        "status": issuance.status,
+        "notes": issuance.notes,
+        "is_overdue": is_overdue,
+    }
 
 
 # ============ EMPLOYEE CRUD ENDPOINTS ============
@@ -508,6 +577,35 @@ async def get_employee(
         raise HTTPException(status_code=404, detail="Employee not found")
 
     return await build_employee_response(employee, db)
+
+
+@router.get("/{employee_id}/issued-assets", response_model=List[EmployeeIssuedAssetResponse])
+async def get_employee_issued_assets(
+    employee_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    token_data: dict = Depends(get_token_data),
+):
+    """Get inventory assets issued to a specific employee."""
+    org_id = UUID(token_data.get("org_id"))
+
+    employee_result = await db.execute(
+        select(Employee).where(Employee.id == employee_id, Employee.org_id == org_id)
+    )
+    employee = employee_result.scalar_one_or_none()
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+
+    result = await db.execute(
+        select(InventoryIssuance)
+        .where(
+            InventoryIssuance.org_id == org_id,
+            InventoryIssuance.issued_to_type == "employee",
+            InventoryIssuance.issued_to_id == employee_id,
+        )
+        .order_by(InventoryIssuance.issue_date.desc(), InventoryIssuance.created_at.desc())
+    )
+    issuances = result.scalars().all()
+    return [await build_employee_issued_asset_response(issuance, db) for issuance in issuances]
 
 
 @router.put("/{employee_id}", response_model=EmployeeResponse)
@@ -943,6 +1041,43 @@ async def delete_contract(
     await db.commit()
 
     return MessageResponse(message="Contract deleted successfully")
+
+
+# ============ ACTIVE CONTRACT ENDPOINT ============
+
+@router.get("/{employee_id}/active-contract")
+async def get_active_contract(
+    employee_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    token_data: dict = Depends(get_token_data)
+):
+    """Get the active contract for an employee (used by payroll to pull salary)."""
+    org_id = UUID(token_data.get("org_id"))
+
+    result = await db.execute(
+        select(EmployeeContract).where(
+            EmployeeContract.employee_id == employee_id,
+            EmployeeContract.org_id == org_id,
+            EmployeeContract.status == ContractStatus.ACTIVE,
+        )
+    )
+    contract = result.scalar_one_or_none()
+    if not contract:
+        raise HTTPException(
+            status_code=404,
+            detail="No active contract found for this employee"
+        )
+
+    return {
+        "id": str(contract.id),
+        "contract_number": contract.contract_number,
+        "salary_amount": contract.salary_amount,
+        "start_date": str(contract.start_date),
+        "end_date": str(contract.end_date) if contract.end_date else None,
+        "duration_months": contract.duration_months,
+        "job_title_on_contract": contract.job_title_on_contract,
+        "status": contract.status.value,
+    }
 
 
 # ============ DOCUMENT ENDPOINTS ============

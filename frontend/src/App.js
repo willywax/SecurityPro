@@ -12,8 +12,13 @@ import ClientList from './pages/ClientList';
 import ClientDetail from './pages/ClientDetail';
 import SiteList from './pages/SiteList';
 import SiteDetail from './pages/SiteDetail';
-import AssetList from './pages/AssetList';
-import AssetDetail from './pages/AssetDetail';
+import StorePage from './pages/StorePage';
+import InventoryList from './pages/InventoryList';
+import InventoryCreate from './pages/InventoryCreate';
+import InventoryDetail from './pages/InventoryDetail';
+import IssuancesPage from './pages/IssuancesPage';
+import WriteOffRegister from './pages/WriteOffRegister';
+import AssetTypesPage from './pages/AssetTypesPage';
 import PayrollList from './pages/PayrollList';
 import PayrollCreate from './pages/PayrollCreate';
 import PayrollDetail from './pages/PayrollDetail';
@@ -61,9 +66,13 @@ function App() {
             <Route path="/sites" element={<SiteList />} />
             <Route path="/sites/new" element={<SiteDetail />} />
             <Route path="/sites/:id" element={<SiteDetail />} />
-            <Route path="/assets" element={<AssetList />} />
-            <Route path="/assets/new" element={<AssetDetail />} />
-            <Route path="/assets/:id" element={<AssetDetail />} />
+            <Route path="/store" element={<StorePage />} />
+            <Route path="/inventory" element={<InventoryList />} />
+            <Route path="/inventory/new" element={<InventoryCreate />} />
+            <Route path="/inventory/:id" element={<InventoryDetail />} />
+            <Route path="/issuances" element={<IssuancesPage />} />
+            <Route path="/write-offs" element={<WriteOffRegister />} />
+            <Route path="/asset-types" element={<AssetTypesPage />} />
             <Route path="/payroll" element={<PayrollList />} />
             <Route path="/payroll/new" element={<PayrollCreate />} />
             <Route path="/payroll/:id" element={<PayrollDetail />} />

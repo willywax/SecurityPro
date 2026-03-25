@@ -58,6 +58,8 @@ const SingleEntryForm = ({ api, onSuccess }) => {
   });
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
+  const [activeContractInfo, setActiveContractInfo] = useState(null); // { contract_number, salary_amount } or null
+  const [noContractWarning, setNoContractWarning] = useState(false);
 
   useEffect(() => {
     api.get('/employees?page_size=100&status_filter=active')
@@ -67,6 +69,27 @@ const SingleEntryForm = ({ api, onSuccess }) => {
       .then(r => setZones(Array.isArray(r.data) ? r.data : []))
       .catch(() => {});
   }, [api]);
+
+  // Auto-fetch active contract salary when employee is selected
+  useEffect(() => {
+    if (!form.employee_id) {
+      setActiveContractInfo(null);
+      setNoContractWarning(false);
+      return;
+    }
+    api.get(`/employees/${form.employee_id}/active-contract`)
+      .then(r => {
+        const contract = r.data;
+        setActiveContractInfo(contract);
+        setNoContractWarning(false);
+        setForm(prev => ({ ...prev, base_salary: String(contract.salary_amount || '') }));
+      })
+      .catch(() => {
+        setActiveContractInfo(null);
+        setNoContractWarning(true);
+        setForm(prev => ({ ...prev, base_salary: '' }));
+      });
+  }, [form.employee_id, api]);
 
   const set = (field, value) => {
     setForm(prev => ({ ...prev, [field]: value }));
@@ -78,7 +101,9 @@ const SingleEntryForm = ({ api, onSuccess }) => {
     if (!form.employee_id) e.employee_id = 'Select an employee';
     if (!form.payroll_month) e.payroll_month = 'Select a payroll month';
     if (!form.base_salary || isNaN(form.base_salary) || parseFloat(form.base_salary) < 0)
-      e.base_salary = 'Enter a valid base salary';
+      e.base_salary = noContractWarning
+        ? 'No active contract — salary not set. Assign a contract first.'
+        : 'Enter a valid base salary';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -166,6 +191,16 @@ const SingleEntryForm = ({ api, onSuccess }) => {
 
           <div className="space-y-2">
             <Label>Base Salary *</Label>
+            {activeContractInfo && (
+              <p className="text-xs text-emerald-600 font-medium">
+                From contract #{activeContractInfo.contract_number}: TZS {Number(activeContractInfo.salary_amount || 0).toLocaleString()}
+              </p>
+            )}
+            {noContractWarning && (
+              <p className="text-xs text-red-500 font-medium">
+                ⚠ No active contract found. Salary not set automatically.
+              </p>
+            )}
             <Input
               type="number"
               min="0"
@@ -242,6 +277,13 @@ const SingleEntryForm = ({ api, onSuccess }) => {
             />
           </div>
         </div>
+
+        {/* No contract warning banner */}
+        {noContractWarning && form.employee_id && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+            ⚠️ No active contract found. Please assign a contract before adding to payroll.
+          </div>
+        )}
 
         {/* Net Pay Preview */}
         <div className="p-4 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-between">
