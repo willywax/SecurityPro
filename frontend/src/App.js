@@ -20,6 +20,10 @@ import PayrollDetail from './pages/PayrollDetail';
 import InvoiceList from './pages/InvoiceList';
 import InvoiceCreate from './pages/InvoiceCreate';
 import InvoiceDetail from './pages/InvoiceDetail';
+import ZoneList from './pages/ZoneList';
+import ZoneDetail from './pages/ZoneDetail';
+import RegionList from './pages/RegionList';
+import RegionDetail from './pages/RegionDetail';
 import { Toaster } from './components/ui/sonner';
 
 // Placeholder pages for navigation items
@@ -66,6 +70,12 @@ function App() {
             <Route path="/invoices" element={<InvoiceList />} />
             <Route path="/invoices/new" element={<InvoiceCreate />} />
             <Route path="/invoices/:id" element={<InvoiceDetail />} />
+            <Route path="/zones" element={<ZoneList />} />
+            <Route path="/zones/new" element={<ZoneDetail />} />
+            <Route path="/zones/:id" element={<ZoneDetail />} />
+            <Route path="/regions" element={<RegionList />} />
+            <Route path="/regions/new" element={<RegionDetail />} />
+            <Route path="/regions/:id" element={<RegionDetail />} />
             <Route path="/settings" element={<PlaceholderPage title="Settings" />} />
           </Route>
 

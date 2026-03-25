@@ -22,6 +22,8 @@ import { Badge } from '../components/ui/badge';
 import { Card, CardContent } from '../components/ui/card';
 import { Search, Plus, ChevronLeft, ChevronRight, User, Phone, Mail, Loader2 } from 'lucide-react';
 import employeeService from '@/services/employeeService';
+import regionService from '@/services/regionService';
+import zoneService from '@/services/zoneService';
 import { API_BASE_URL } from '@/lib/api';
 
 const statusColors = {
@@ -69,7 +71,17 @@ const EmployeeList = () => {
   const [search, setSearch] = useState(searchParams.get('search') || '');
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all');
+  const [regionFilter, setRegionFilter] = useState('all');
+  const [zoneFilter, setZoneFilter] = useState('all');
   const [page, setPage] = useState(Number(searchParams.get('page') || 1));
+
+  const zonesQuery = useQuery({ queryKey: ['zones', 'filter'], queryFn: () => zoneService.getAll() });
+  const regionsQuery = useQuery({
+    queryKey: ['regions', 'filter', zoneFilter],
+    queryFn: () => regionService.getAll({ zone_id: zoneFilter !== 'all' ? zoneFilter : undefined }),
+  });
+  const zones = zonesQuery.data || [];
+  const regions = regionsQuery.data || [];
   const pageSize = 10;
 
   useEffect(() => {
@@ -93,6 +105,7 @@ const EmployeeList = () => {
         page_size: pageSize,
         search: debouncedSearch || undefined,
         status_filter: statusFilter !== 'all' ? statusFilter : undefined,
+        region_id: regionFilter !== 'all' ? regionFilter : undefined,
       }),
   });
 
@@ -130,14 +143,8 @@ const EmployeeList = () => {
             data-testid="input-search-employees"
           />
         </div>
-        <Select
-          value={statusFilter}
-          onValueChange={(value) => {
-            setStatusFilter(value);
-            setPage(1);
-          }}
-        >
-          <SelectTrigger className="w-full sm:w-[180px]" data-testid="select-status-filter">
+        <Select value={statusFilter} onValueChange={(value) => { setStatusFilter(value); setPage(1); }}>
+          <SelectTrigger className="w-full sm:w-[160px]" data-testid="select-status-filter">
             <SelectValue placeholder="All Statuses" />
           </SelectTrigger>
           <SelectContent>
@@ -146,6 +153,24 @@ const EmployeeList = () => {
             <SelectItem value="inactive">Inactive</SelectItem>
             <SelectItem value="on_leave">On Leave</SelectItem>
             <SelectItem value="terminated">Terminated</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={zoneFilter} onValueChange={(value) => { setZoneFilter(value); setRegionFilter('all'); setPage(1); }}>
+          <SelectTrigger className="w-full sm:w-[160px]">
+            <SelectValue placeholder="All Zones" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Zones</SelectItem>
+            {zones.map((z) => <SelectItem key={z.id} value={z.id}>{z.zone_name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={regionFilter} onValueChange={(value) => { setRegionFilter(value); setPage(1); }}>
+          <SelectTrigger className="w-full sm:w-[160px]">
+            <SelectValue placeholder="All Regions" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Regions</SelectItem>
+            {regions.map((r) => <SelectItem key={r.id} value={r.id}>{r.region_name}</SelectItem>)}
           </SelectContent>
         </Select>
       </div>
@@ -189,7 +214,7 @@ const EmployeeList = () => {
                   <TableHead className="font-semibold">Employee</TableHead>
                   <TableHead className="font-semibold">ID / Guard No</TableHead>
                   <TableHead className="font-semibold">Contact</TableHead>
-                  <TableHead className="font-semibold">Address</TableHead>
+                  <TableHead className="font-semibold">Region / Zone</TableHead>
                   <TableHead className="font-semibold">Status</TableHead>
                 </TableRow>
               </TableHeader>
@@ -215,7 +240,14 @@ const EmployeeList = () => {
                       {employee.guard_no && <p className="text-sm text-slate-500">Guard #{employee.guard_no}</p>}
                     </TableCell>
                     <TableCell>{employee.phone_1 ? <p className="text-slate-600">{employee.phone_1}</p> : '-'}</TableCell>
-                    <TableCell className="text-slate-600">{employee.address || '-'}</TableCell>
+                    <TableCell>
+                      {employee.region_name ? (
+                        <div>
+                          <p className="text-slate-900 text-sm">{employee.region_name}</p>
+                          {employee.zone_name && <p className="text-slate-400 text-xs">{employee.zone_name}</p>}
+                        </div>
+                      ) : '-'}
+                    </TableCell>
                     <TableCell>
                       <Badge variant="outline" className={statusColors[employee.employment_status]}>
                         {statusLabels[employee.employment_status] || employee.employment_status}

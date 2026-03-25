@@ -10,6 +10,8 @@ import { Card, CardContent } from '../components/ui/card';
 import { Search, Plus, ChevronLeft, ChevronRight, MapPin, Loader2 } from 'lucide-react';
 import clientService from '@/services/clientService';
 import siteService from '@/services/siteService';
+import regionService from '@/services/regionService';
+import zoneService from '@/services/zoneService';
 
 const statusColors = {
   active: 'bg-emerald-100 text-emerald-700 border-emerald-200',
@@ -21,14 +23,24 @@ const SiteList = () => {
   const [search, setSearch] = useState('');
   const [clientFilter, setClientFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [zoneFilter, setZoneFilter] = useState('all');
+  const [regionFilter, setRegionFilter] = useState('all');
   const [page, setPage] = useState(1);
   const pageSize = 10;
 
   const clientsQuery = useQuery({ queryKey: ['clients', 'filter'], queryFn: () => clientService.getAll({ page: 1, page_size: 100 }) });
-  const sitesQuery = useQuery({
-    queryKey: ['sites', { page, pageSize, search, clientFilter, statusFilter }],
-    queryFn: () => siteService.getAll({ page, page_size: pageSize, search: search || undefined, client_id: clientFilter !== 'all' ? clientFilter : undefined, status_filter: statusFilter !== 'all' ? statusFilter : undefined }),
+  const zonesQuery = useQuery({ queryKey: ['zones', 'site-filter'], queryFn: () => zoneService.getAll() });
+  const regionsQuery = useQuery({
+    queryKey: ['regions', 'site-filter', zoneFilter],
+    queryFn: () => regionService.getAll({ zone_id: zoneFilter !== 'all' ? zoneFilter : undefined }),
   });
+  const sitesQuery = useQuery({
+    queryKey: ['sites', { page, pageSize, search, clientFilter, statusFilter, regionFilter }],
+    queryFn: () => siteService.getAll({ page, page_size: pageSize, search: search || undefined, client_id: clientFilter !== 'all' ? clientFilter : undefined, status_filter: statusFilter !== 'all' ? statusFilter : undefined, region_id: regionFilter !== 'all' ? regionFilter : undefined }),
+  });
+
+  const zones = zonesQuery.data || [];
+  const regions = regionsQuery.data || [];
 
   const sites = sitesQuery.data?.data || [];
   const clients = clientsQuery.data?.data || [];
@@ -65,6 +77,20 @@ const SiteList = () => {
             <SelectItem value="inactive">Inactive</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={zoneFilter} onValueChange={(value) => { setZoneFilter(value); setRegionFilter('all'); setPage(1); }}>
+          <SelectTrigger className="w-full sm:w-[160px]"><SelectValue placeholder="All Zones" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Zones</SelectItem>
+            {zones.map((z) => <SelectItem key={z.id} value={z.id}>{z.zone_name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={regionFilter} onValueChange={(value) => { setRegionFilter(value); setPage(1); }}>
+          <SelectTrigger className="w-full sm:w-[160px]"><SelectValue placeholder="All Regions" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Regions</SelectItem>
+            {regions.map((r) => <SelectItem key={r.id} value={r.id}>{r.region_name}</SelectItem>)}
+          </SelectContent>
+        </Select>
       </div>
 
       {sitesQuery.isLoading ? (
@@ -80,7 +106,8 @@ const SiteList = () => {
                   <TableHead className="font-semibold">Site</TableHead>
                   <TableHead className="font-semibold">ID</TableHead>
                   <TableHead className="font-semibold">Client</TableHead>
-                  <TableHead className="font-semibold">Region / District</TableHead>
+                  <TableHead className="font-semibold">Zone / Region</TableHead>
+                  <TableHead className="font-semibold">District</TableHead>
                   <TableHead className="font-semibold">Contact</TableHead>
                   <TableHead className="font-semibold">Status</TableHead>
                 </TableRow>
@@ -91,7 +118,15 @@ const SiteList = () => {
                     <TableCell><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center"><MapPin className="w-5 h-5 text-emerald-600" /></div><p className="font-medium text-slate-900">{site.site_name}</p></div></TableCell>
                     <TableCell><span className="font-mono text-sm text-slate-600">{site.site_id}</span></TableCell>
                     <TableCell>{site.client_name || '-'}</TableCell>
-                    <TableCell>{[site.region, site.district].filter(Boolean).join(' / ') || '-'}</TableCell>
+                    <TableCell>
+                      {site.region_name ? (
+                        <div>
+                          <p className="text-slate-900 text-sm">{site.region_name}</p>
+                          {site.zone_name && <p className="text-slate-400 text-xs">{site.zone_name}</p>}
+                        </div>
+                      ) : '-'}
+                    </TableCell>
+                    <TableCell>{site.district || '-'}</TableCell>
                     <TableCell>{site.contact_person || site.contact_phone || '-'}</TableCell>
                     <TableCell><Badge variant="outline" className={statusColors[site.status]}>{site.status}</Badge></TableCell>
                   </TableRow>

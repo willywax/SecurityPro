@@ -13,6 +13,8 @@ import {
   Settings,
   LogOut,
   ChevronDown,
+  Globe,
+  Map,
 } from 'lucide-react';
 
 const navigation = [
@@ -20,6 +22,8 @@ const navigation = [
   { name: 'Employees', href: '/employees', icon: Users },
   { name: 'Clients', href: '/clients', icon: Building2 },
   { name: 'Sites', href: '/sites', icon: MapPin },
+  { name: 'Zones', href: '/zones', icon: Globe },
+  { name: 'Regions', href: '/regions', icon: Map },
   { name: 'Assets', href: '/assets', icon: Package },
   { name: 'Payroll', href: '/payroll', icon: DollarSign },
   { name: 'Invoices', href: '/invoices', icon: FileText },

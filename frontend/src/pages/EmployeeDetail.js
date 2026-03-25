@@ -13,9 +13,12 @@ import { EmptyState } from '../components/ui/empty-state';
 import { ArrowLeft, Camera, CreditCard, File, FileText, Heart, Loader2, Package, Plus, Save, Trash2, User, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import employeeService from '@/services/employeeService';
+import regionService from '@/services/regionService';
 import { API_BASE_URL } from '@/lib/api';
 import { formatTZS } from '@/utils/currency';
 import { formatApiError } from '@/utils/errors';
+import { LabeledInputField, LabeledSelectField, LabeledTextareaField } from '@/components/forms/labeled-fields';
+import { ID_TYPE_OPTIONS, RELATIONSHIP_OPTIONS } from '@/constants/contactOptions';
 
 const statusColors = {
   active: 'bg-emerald-100 text-emerald-700 border-emerald-200',
@@ -25,6 +28,11 @@ const statusColors = {
 };
 
 const formatDate = (value) => (value ? new Date(value).toLocaleDateString() : '-');
+const TANZANIA_PHONE_REGEX = /^(\+255|0)[67]\d{8}$/;
+const DEFAULT_REFEREE_FORM = { full_name: '', referee_relationship: '', phone_number: '', alternate_phone: '', id_type: '', id_number: '', occupation: '', address: '', notes: '' };
+const DEFAULT_KIN_FORM = { full_name: '', kin_relationship: '', phone_1: '', phone_2: '', id_type: '', id_number: '', occupation: '', address: '', notes: '' };
+const RELATIONSHIP_LABELS = Object.fromEntries(RELATIONSHIP_OPTIONS.map((option) => [option.value, option.label]));
+const ID_TYPE_LABELS = Object.fromEntries(ID_TYPE_OPTIONS.map((option) => [option.value, option.label]));
 
 const Section = ({ loading, items, emptyText, render }) => {
   if (loading) {
@@ -36,6 +44,34 @@ const Section = ({ loading, items, emptyText, render }) => {
   return <div className="space-y-3">{items.map(render)}</div>;
 };
 
+const validateRefereeForm = (form) => {
+  const errors = {};
+  if (!form.full_name.trim()) errors.full_name = 'Full name is required';
+  if (!form.referee_relationship) errors.referee_relationship = 'Relationship is required';
+  if (!form.phone_number.trim()) errors.phone_number = 'Phone number is required';
+  else if (!TANZANIA_PHONE_REGEX.test(form.phone_number.trim())) errors.phone_number = 'Use a valid Tanzanian phone number';
+  if (form.alternate_phone && !TANZANIA_PHONE_REGEX.test(form.alternate_phone.trim())) errors.alternate_phone = 'Use a valid Tanzanian phone number';
+  if (!form.id_type) errors.id_type = 'ID type is required';
+  if (!form.id_number.trim()) errors.id_number = 'ID number is required';
+  if (!form.occupation.trim()) errors.occupation = 'Occupation is required';
+  if (!form.address.trim()) errors.address = 'Address is required';
+  return errors;
+};
+
+const validateKinForm = (form) => {
+  const errors = {};
+  if (!form.full_name.trim()) errors.full_name = 'Full name is required';
+  if (!form.kin_relationship) errors.kin_relationship = 'Relationship is required';
+  if (!form.phone_1.trim()) errors.phone_1 = 'Phone number is required';
+  else if (!TANZANIA_PHONE_REGEX.test(form.phone_1.trim())) errors.phone_1 = 'Use a valid Tanzanian phone number';
+  if (form.phone_2 && !TANZANIA_PHONE_REGEX.test(form.phone_2.trim())) errors.phone_2 = 'Use a valid Tanzanian phone number';
+  if (!form.id_type) errors.id_type = 'ID type is required';
+  if (!form.id_number.trim()) errors.id_number = 'ID number is required';
+  if (!form.occupation.trim()) errors.occupation = 'Occupation is required';
+  if (!form.address.trim()) errors.address = 'Address is required';
+  return errors;
+};
+
 const EmployeeDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -44,13 +80,24 @@ const EmployeeDetail = () => {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState(null);
   const [bankForm, setBankForm] = useState({ bank_name: '', bank_branch: '', account_name: '', account_number: '' });
-  const [refereeForm, setRefereeForm] = useState({ full_name: '', referee_relationship: '', phone_number: '', alternate_phone: '', id_type: '', id_number: '', address: '', occupation: '', notes: '' });
-  const [kinForm, setKinForm] = useState({ full_name: '', kin_relationship: '', phone_1: '', phone_2: '', address: '', id_type: '', id_number: '', notes: '' });
+  const [refereeForm, setRefereeForm] = useState(DEFAULT_REFEREE_FORM);
+  const [refereeErrors, setRefereeErrors] = useState({});
+  const [kinForm, setKinForm] = useState(DEFAULT_KIN_FORM);
+  const [kinErrors, setKinErrors] = useState({});
   const [contractForm, setContractForm] = useState({ contract_type: 'permanent', start_date: '', end_date: '', salary: '', allowances: '', status: 'draft', notes: '' });
   const [historyForm, setHistoryForm] = useState({ employer_name: '', job_title: '', start_date: '', end_date: '', reason_for_leaving: '', notes: '' });
   const [documentForm, setDocumentForm] = useState({ document_type: '', document_name: '', notes: '', file: null });
 
   const employeeQuery = useQuery({ queryKey: ['employee', id], queryFn: () => employeeService.getById(id) });
+  const regionsQuery = useQuery({ queryKey: ['regions', 'employee-form'], queryFn: () => regionService.getAll({ status_filter: 'active' }) });
+  const regions = Array.isArray(regionsQuery.data) ? regionsQuery.data : regionsQuery.data?.data || [];
+  const regionPlaceholder = regionsQuery.isLoading
+    ? 'Loading regions...'
+    : regionsQuery.isError
+      ? 'Failed to load regions'
+      : regions.length === 0
+        ? 'No active regions available'
+        : 'Select region';
   const bankQuery = useQuery({ queryKey: ['employee', id, 'bank-accounts'], queryFn: () => employeeService.getBankAccounts(id), enabled: !!id });
   const refereesQuery = useQuery({ queryKey: ['employee', id, 'referees'], queryFn: () => employeeService.getReferees(id), enabled: !!id });
   const kinQuery = useQuery({ queryKey: ['employee', id, 'next-of-kin'], queryFn: () => employeeService.getNextOfKin(id), enabled: !!id });
@@ -116,6 +163,58 @@ const EmployeeDetail = () => {
     }
   };
 
+  const updateRefereeField = (field, value) => {
+    setRefereeForm((current) => ({ ...current, [field]: value }));
+    if (refereeErrors[field]) {
+      setRefereeErrors((current) => ({ ...current, [field]: null }));
+    }
+  };
+
+  const updateKinField = (field, value) => {
+    setKinForm((current) => ({ ...current, [field]: value }));
+    if (kinErrors[field]) {
+      setKinErrors((current) => ({ ...current, [field]: null }));
+    }
+  };
+
+  const submitReferee = async () => {
+    const errors = validateRefereeForm(refereeForm);
+    setRefereeErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      toast.error('Please fix the referee form errors');
+      return;
+    }
+
+    try {
+      await employeeService.addReferee(id, refereeForm);
+      setRefereeForm(DEFAULT_REFEREE_FORM);
+      setRefereeErrors({});
+      refresh('referees');
+      toast.success('Referee added');
+    } catch (error) {
+      toast.error(formatApiError(error, 'Failed to add referee'));
+    }
+  };
+
+  const submitNextOfKin = async () => {
+    const errors = validateKinForm(kinForm);
+    setKinErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      toast.error('Please fix the next of kin form errors');
+      return;
+    }
+
+    try {
+      await employeeService.addNextOfKin(id, kinForm);
+      setKinForm(DEFAULT_KIN_FORM);
+      setKinErrors({});
+      refresh('next-of-kin');
+      toast.success('Next of kin added');
+    } catch (error) {
+      toast.error(formatApiError(error, 'Failed to add next of kin'));
+    }
+  };
+
   return (
     <div className="space-y-6" data-testid="employee-detail-page">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -175,6 +274,23 @@ const EmployeeDetail = () => {
               <div className="space-y-2"><Label>Phone</Label><Input value={form.phone_1 || ''} disabled={!editing} onChange={(event) => setForm((current) => ({ ...current, phone_1: event.target.value }))} /></div>
               <div className="space-y-2"><Label>Email</Label><Input value={form.email || ''} disabled={!editing} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} /></div>
               <div className="space-y-2"><Label>Status</Label><Input value={form.employment_status || ''} disabled={!editing} onChange={(event) => setForm((current) => ({ ...current, employment_status: event.target.value }))} /></div>
+              <div className="space-y-2">
+                <Label>Region</Label>
+                {editing ? (
+                  <Select value={form.region_id || ''} onValueChange={(value) => setForm((current) => ({ ...current, region_id: value || null }))}>
+                    <SelectTrigger disabled={regionsQuery.isLoading || regionsQuery.isError || regions.length === 0}><SelectValue placeholder={regionPlaceholder} /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">No region</SelectItem>
+                      {regions.map((r) => <SelectItem key={r.id} value={r.id}>{r.region_name} ({r.zone_name})</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className="text-sm text-slate-900 py-2">
+                    {employee.region_name || '-'}
+                    {employee.zone_name && <span className="text-slate-400 text-xs ml-1">({employee.zone_name})</span>}
+                  </p>
+                )}
+              </div>
               <div className="space-y-2 md:col-span-2 lg:col-span-3"><Label>Address</Label><Textarea value={form.physical_address || ''} disabled={!editing} onChange={(event) => setForm((current) => ({ ...current, physical_address: event.target.value }))} rows={2} /></div>
               <div><p className="text-sm font-medium text-slate-500">Date Joined</p><p className="mt-1 text-sm text-slate-900">{formatDate(employee.hire_date)}</p></div>
               <div><p className="text-sm font-medium text-slate-500">Date Left</p><p className="mt-1 text-sm text-slate-900">{formatDate(employee.termination_date)}</p></div>
@@ -219,31 +335,20 @@ const EmployeeDetail = () => {
           <Card className="mb-4">
             <CardHeader><CardTitle className="text-lg">Add Referee</CardTitle></CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Input placeholder="Full name" value={refereeForm.full_name} onChange={(event) => setRefereeForm((current) => ({ ...current, full_name: event.target.value }))} />
-              <Input placeholder="Relationship" value={refereeForm.referee_relationship} onChange={(event) => setRefereeForm((current) => ({ ...current, referee_relationship: event.target.value }))} />
-              <Input placeholder="Phone number" value={refereeForm.phone_number} onChange={(event) => setRefereeForm((current) => ({ ...current, phone_number: event.target.value }))} />
-              <Input placeholder="Alternate phone" value={refereeForm.alternate_phone} onChange={(event) => setRefereeForm((current) => ({ ...current, alternate_phone: event.target.value }))} />
-              <Select value={refereeForm.id_type} onValueChange={(value) => setRefereeForm((current) => ({ ...current, id_type: value }))}>
-                <SelectTrigger>
-                  <SelectValue placeholder="ID type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="national_id">National ID</SelectItem>
-                  <SelectItem value="voter_id">Voter ID</SelectItem>
-                  <SelectItem value="driving_license">Driving License</SelectItem>
-                  <SelectItem value="passport">Passport</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
-                </SelectContent>
-              </Select>
-              <Input placeholder="ID number" value={refereeForm.id_number} onChange={(event) => setRefereeForm((current) => ({ ...current, id_number: event.target.value }))} />
-              <Input placeholder="Occupation" value={refereeForm.occupation} onChange={(event) => setRefereeForm((current) => ({ ...current, occupation: event.target.value }))} />
-              <div className="md:col-span-2"><Input placeholder="Address" value={refereeForm.address} onChange={(event) => setRefereeForm((current) => ({ ...current, address: event.target.value }))} /></div>
-              <div className="md:col-span-2"><Textarea placeholder="Notes" value={refereeForm.notes} onChange={(event) => setRefereeForm((current) => ({ ...current, notes: event.target.value }))} /></div>
-              <div className="md:col-span-2 flex justify-end"><Button onClick={() => employeeService.addReferee(id, refereeForm).then(() => { setRefereeForm({ full_name: '', referee_relationship: '', phone_number: '', alternate_phone: '', id_type: '', id_number: '', address: '', occupation: '', notes: '' }); refresh('referees'); toast.success('Referee added'); }).catch(error => toast.error(formatApiError(error, 'Failed to add referee')))}><Plus className="w-4 h-4 mr-2" />Add</Button></div>
+              <LabeledInputField id="referee-full-name" label="Full Name" value={refereeForm.full_name} onChange={(value) => updateRefereeField('full_name', value)} placeholder="Enter full name" error={refereeErrors.full_name} required />
+              <LabeledSelectField id="referee-relationship" label="Relationship" value={refereeForm.referee_relationship} onChange={(value) => updateRefereeField('referee_relationship', value)} placeholder="Select relationship" options={RELATIONSHIP_OPTIONS} error={refereeErrors.referee_relationship} required />
+              <LabeledInputField id="referee-phone" label="Phone Number" value={refereeForm.phone_number} onChange={(value) => updateRefereeField('phone_number', value)} placeholder="07XXXXXXXX or +255XXXXXXXXX" error={refereeErrors.phone_number} required />
+              <LabeledInputField id="referee-alt-phone" label="Alternate Phone" value={refereeForm.alternate_phone} onChange={(value) => updateRefereeField('alternate_phone', value)} placeholder="Optional alternate phone" error={refereeErrors.alternate_phone} />
+              <LabeledSelectField id="referee-id-type" label="ID Type" value={refereeForm.id_type} onChange={(value) => updateRefereeField('id_type', value)} placeholder="Select ID type" options={ID_TYPE_OPTIONS} error={refereeErrors.id_type} required />
+              <LabeledInputField id="referee-id-number" label="ID Number" value={refereeForm.id_number} onChange={(value) => updateRefereeField('id_number', value)} placeholder="Enter ID number" error={refereeErrors.id_number} required />
+              <LabeledInputField id="referee-occupation" label="Occupation" value={refereeForm.occupation} onChange={(value) => updateRefereeField('occupation', value)} placeholder="Enter occupation" error={refereeErrors.occupation} required />
+              <LabeledTextareaField id="referee-address" label="Address" value={refereeForm.address} onChange={(value) => updateRefereeField('address', value)} placeholder="Enter address" error={refereeErrors.address} required className="md:col-span-2" rows={2} />
+              <LabeledTextareaField id="referee-notes" label="Notes" value={refereeForm.notes} onChange={(value) => updateRefereeField('notes', value)} placeholder="Optional notes" className="md:col-span-2" rows={3} />
+              <div className="md:col-span-2 flex justify-end"><Button onClick={submitReferee}><Plus className="w-4 h-4 mr-2" />Add</Button></div>
             </CardContent>
           </Card>
           <Section loading={refereesQuery.isLoading} items={refereesQuery.data} emptyText="No referees" render={(item) => (
-            <Card key={item.id}><CardContent className="p-4 flex items-start justify-between"><div><p className="font-medium text-slate-900">{item.full_name}</p><p className="text-slate-500">{item.referee_relationship} · {item.phone_number}</p></div><Button variant="outline" size="sm" onClick={() => removeItem(employeeService.deleteReferee(id, item.id), 'referees', 'Referee deleted')}><Trash2 className="w-4 h-4" /></Button></CardContent></Card>
+            <Card key={item.id}><CardContent className="p-4 flex items-start justify-between gap-4"><div><p className="font-medium text-slate-900">{item.full_name}</p><p className="text-slate-500">{RELATIONSHIP_LABELS[item.referee_relationship] || item.referee_relationship} · {item.phone_number}</p><p className="text-sm text-slate-500">{ID_TYPE_LABELS[item.id_type] || item.id_type} · {item.id_number}</p><p className="text-sm text-slate-500">{item.occupation} · {item.address}</p></div><Button variant="outline" size="sm" onClick={() => removeItem(employeeService.deleteReferee(id, item.id), 'referees', 'Referee deleted')}><Trash2 className="w-4 h-4" /></Button></CardContent></Card>
           )} />
         </TabsContent>
 
@@ -251,30 +356,20 @@ const EmployeeDetail = () => {
           <Card className="mb-4">
             <CardHeader><CardTitle className="text-lg">Add Next of Kin</CardTitle></CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Input placeholder="Full name" value={kinForm.full_name} onChange={(event) => setKinForm((current) => ({ ...current, full_name: event.target.value }))} />
-              <Input placeholder="Relationship" value={kinForm.kin_relationship} onChange={(event) => setKinForm((current) => ({ ...current, kin_relationship: event.target.value }))} />
-              <Input placeholder="Phone 1" value={kinForm.phone_1} onChange={(event) => setKinForm((current) => ({ ...current, phone_1: event.target.value }))} />
-              <Input placeholder="Phone 2" value={kinForm.phone_2} onChange={(event) => setKinForm((current) => ({ ...current, phone_2: event.target.value }))} />
-              <Select value={kinForm.id_type} onValueChange={(value) => setKinForm((current) => ({ ...current, id_type: value }))}>
-                <SelectTrigger>
-                  <SelectValue placeholder="ID type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="national_id">National ID</SelectItem>
-                  <SelectItem value="voter_id">Voter ID</SelectItem>
-                  <SelectItem value="driving_license">Driving License</SelectItem>
-                  <SelectItem value="passport">Passport</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
-                </SelectContent>
-              </Select>
-              <Input placeholder="ID number" value={kinForm.id_number} onChange={(event) => setKinForm((current) => ({ ...current, id_number: event.target.value }))} />
-              <div className="md:col-span-2"><Input placeholder="Address" value={kinForm.address} onChange={(event) => setKinForm((current) => ({ ...current, address: event.target.value }))} /></div>
-              <div className="md:col-span-2"><Textarea placeholder="Notes" value={kinForm.notes} onChange={(event) => setKinForm((current) => ({ ...current, notes: event.target.value }))} /></div>
-              <div className="md:col-span-2 flex justify-end"><Button onClick={() => employeeService.addNextOfKin(id, kinForm).then(() => { setKinForm({ full_name: '', kin_relationship: '', phone_1: '', phone_2: '', address: '', id_type: '', id_number: '', notes: '' }); refresh('next-of-kin'); toast.success('Next of kin added'); }).catch(error => toast.error(formatApiError(error, 'Failed to add next of kin')))}><Plus className="w-4 h-4 mr-2" />Add</Button></div>
+              <LabeledInputField id="kin-full-name" label="Full Name" value={kinForm.full_name} onChange={(value) => updateKinField('full_name', value)} placeholder="Enter full name" error={kinErrors.full_name} required />
+              <LabeledSelectField id="kin-relationship" label="Relationship" value={kinForm.kin_relationship} onChange={(value) => updateKinField('kin_relationship', value)} placeholder="Select relationship" options={RELATIONSHIP_OPTIONS} error={kinErrors.kin_relationship} required />
+              <LabeledInputField id="kin-phone-1" label="Phone Number" value={kinForm.phone_1} onChange={(value) => updateKinField('phone_1', value)} placeholder="07XXXXXXXX or +255XXXXXXXXX" error={kinErrors.phone_1} required />
+              <LabeledInputField id="kin-phone-2" label="Alternate Phone" value={kinForm.phone_2} onChange={(value) => updateKinField('phone_2', value)} placeholder="Optional alternate phone" error={kinErrors.phone_2} />
+              <LabeledSelectField id="kin-id-type" label="ID Type" value={kinForm.id_type} onChange={(value) => updateKinField('id_type', value)} placeholder="Select ID type" options={ID_TYPE_OPTIONS} error={kinErrors.id_type} required />
+              <LabeledInputField id="kin-id-number" label="ID Number" value={kinForm.id_number} onChange={(value) => updateKinField('id_number', value)} placeholder="Enter ID number" error={kinErrors.id_number} required />
+              <LabeledInputField id="kin-occupation" label="Occupation" value={kinForm.occupation} onChange={(value) => updateKinField('occupation', value)} placeholder="Enter occupation" error={kinErrors.occupation} required />
+              <LabeledTextareaField id="kin-address" label="Address" value={kinForm.address} onChange={(value) => updateKinField('address', value)} placeholder="Enter address" error={kinErrors.address} required className="md:col-span-2" rows={2} />
+              <LabeledTextareaField id="kin-notes" label="Notes" value={kinForm.notes} onChange={(value) => updateKinField('notes', value)} placeholder="Optional notes" className="md:col-span-2" rows={3} />
+              <div className="md:col-span-2 flex justify-end"><Button onClick={submitNextOfKin}><Plus className="w-4 h-4 mr-2" />Add</Button></div>
             </CardContent>
           </Card>
           <Section loading={kinQuery.isLoading} items={kinQuery.data} emptyText="No next of kin" render={(item) => (
-            <Card key={item.id}><CardContent className="p-4 flex items-start justify-between"><div><p className="font-medium text-slate-900">{item.full_name}</p><p className="text-slate-500">{item.kin_relationship} · {item.phone_1}</p></div><Button variant="outline" size="sm" onClick={() => removeItem(employeeService.deleteNextOfKin(id, item.id), 'next-of-kin', 'Next of kin deleted')}><Trash2 className="w-4 h-4" /></Button></CardContent></Card>
+            <Card key={item.id}><CardContent className="p-4 flex items-start justify-between gap-4"><div><p className="font-medium text-slate-900">{item.full_name}</p><p className="text-slate-500">{RELATIONSHIP_LABELS[item.kin_relationship] || item.kin_relationship} · {item.phone_1}</p><p className="text-sm text-slate-500">{ID_TYPE_LABELS[item.id_type] || item.id_type} · {item.id_number}</p><p className="text-sm text-slate-500">{item.occupation || '-'} · {item.address}</p></div><Button variant="outline" size="sm" onClick={() => removeItem(employeeService.deleteNextOfKin(id, item.id), 'next-of-kin', 'Next of kin deleted')}><Trash2 className="w-4 h-4" /></Button></CardContent></Card>
           )} />
         </TabsContent>
 

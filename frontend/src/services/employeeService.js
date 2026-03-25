@@ -12,9 +12,9 @@ const normalizeEmployee = (employee) => {
   return {
     ...employee,
     full_name: [employee.first_name, employee.middle_name, employee.last_name].filter(Boolean).join(' '),
-    address: employee.physical_address || employee.postal_address || '',
+    address: employee.physical_address || employee.region || employee.postal_address || '',
     date_joined: employee.hire_date || '',
-    date_left: employee.termination_date || '',
+    date_left: employee.hire_date || '',
     id_number: employee.nin || '',
   };
 };
@@ -32,12 +32,14 @@ const mapEmployeePayload = (data = {}) => ({
   phone_2: data.phone_2 || null,
   email: data.email || null,
   physical_address: data.address || data.physical_address || null,
-  postal_address: data.postal_address || null,
+  region: data.region || null,
+  region_id: data.region_id || null,
+  postal_address: null,
   education_background: data.education_background || null,
   job_title: data.job_title || null,
   employment_status: data.employment_status || 'active',
-  hire_date: data.date_joined || data.hire_date || null,
-  termination_date: data.date_left || data.termination_date || null,
+  hire_date: data.date_joined || data.hire_date || data.date_left || null,
+  termination_date: data.termination_date || null,
   notes: data.notes || null,
 });
 
@@ -107,6 +109,7 @@ const employeeService = {
       phone_1: data.phone_1 || data.phone,
       phone_2: data.phone_2 || null,
       address: data.address || null,
+      occupation: data.occupation || data.organization || null,
       id_type: data.id_type || null,
       id_number: data.id_number || null,
       notes: data.notes || null,

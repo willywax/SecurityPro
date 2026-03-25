@@ -14,6 +14,8 @@ import clientService from '@/services/clientService';
 import { formatApiError } from '@/utils/errors';
 
 const emptyForm = { client_name: '', contact_person: '', phone_1: '', phone_2: '', email: '', billing_email: '', address: '', status: 'active', notes: '' };
+const phonePattern = /^(\+255|0)[67]\d{8}$/;
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const ClientDetail = () => {
   const { id } = useParams();
@@ -22,6 +24,7 @@ const ClientDetail = () => {
   const isCreate = id === 'new' || !id;
   const [editing, setEditing] = useState(isCreate);
   const [formData, setFormData] = useState(emptyForm);
+  const [errors, setErrors] = useState({});
 
   const clientQuery = useQuery({
     queryKey: ['client', id],
@@ -35,6 +38,13 @@ const ClientDetail = () => {
     }
   }, [clientQuery.data]);
 
+  const updateField = (field, value) => {
+    setFormData((current) => ({ ...current, [field]: value }));
+    if (errors[field]) {
+      setErrors((current) => ({ ...current, [field]: null }));
+    }
+  };
+
   const cleanPayload = (data) => {
     const cleaned = { ...data };
     // Replace empty strings with null so EmailStr fields pass backend validation
@@ -42,6 +52,21 @@ const ClientDetail = () => {
       if (cleaned[f] === '') cleaned[f] = null;
     });
     return cleaned;
+  };
+
+  const validateForm = () => {
+    const nextErrors = {};
+    if (!formData.client_name?.trim()) nextErrors.client_name = 'Client name is required';
+    if (!formData.contact_person?.trim()) nextErrors.contact_person = 'Contact person is required';
+    if (!formData.phone_1?.trim()) nextErrors.phone_1 = 'Phone 1 is required';
+    if (!formData.address?.trim()) nextErrors.address = 'Address is required';
+    if (!formData.status) nextErrors.status = 'Status is required';
+    if (formData.phone_1 && !phonePattern.test(formData.phone_1)) nextErrors.phone_1 = 'Phone 1 must be a valid Tanzanian number (+255XXXXXXXXX or 0XXXXXXXXX)';
+    if (formData.phone_2 && !phonePattern.test(formData.phone_2)) nextErrors.phone_2 = 'Phone 2 must be a valid Tanzanian number (+255XXXXXXXXX or 0XXXXXXXXX)';
+    if (formData.email && !emailPattern.test(formData.email)) nextErrors.email = 'Email format is invalid';
+    if (formData.billing_email && !emailPattern.test(formData.billing_email)) nextErrors.billing_email = 'Billing email format is invalid';
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
   };
 
   const saveMutation = useMutation({
@@ -89,8 +114,8 @@ const ClientDetail = () => {
         <div className="flex items-center gap-2">
           {editing ? (
             <>
-              <Button variant="outline" onClick={() => { if (isCreate) navigate('/clients'); else { setFormData(client); setEditing(false); } }}>Cancel</Button>
-              <Button onClick={() => saveMutation.mutate(formData)} disabled={saveMutation.isPending} className="bg-[#0F172A] hover:bg-slate-800">{saveMutation.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving...</> : <><Save className="w-4 h-4 mr-2" />{isCreate ? 'Create Client' : 'Save Changes'}</>}</Button>
+              <Button variant="outline" onClick={() => { setErrors({}); if (isCreate) navigate('/clients'); else { setFormData(client); setEditing(false); } }}>Cancel</Button>
+              <Button onClick={() => { if (!validateForm()) return; saveMutation.mutate(formData); }} disabled={saveMutation.isPending} className="bg-[#0F172A] hover:bg-slate-800">{saveMutation.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving...</> : <><Save className="w-4 h-4 mr-2" />{isCreate ? 'Create Client' : 'Save Changes'}</>}</Button>
             </>
           ) : (
             <>
@@ -106,15 +131,15 @@ const ClientDetail = () => {
         <CardContent>
           {editing ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2 md:col-span-2"><Label>Client Name</Label><Input value={formData.client_name} onChange={(event) => setFormData((current) => ({ ...current, client_name: event.target.value }))} /></div>
-              <div className="space-y-2"><Label>Contact Person</Label><Input value={formData.contact_person || ''} onChange={(event) => setFormData((current) => ({ ...current, contact_person: event.target.value }))} /></div>
-              <div className="space-y-2"><Label>Status</Label><Select value={formData.status} onValueChange={(value) => setFormData((current) => ({ ...current, status: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Active</SelectItem><SelectItem value="inactive">Inactive</SelectItem><SelectItem value="prospect">Prospect</SelectItem></SelectContent></Select></div>
-              <div className="space-y-2"><Label>Phone 1</Label><Input value={formData.phone_1 || ''} onChange={(event) => setFormData((current) => ({ ...current, phone_1: event.target.value }))} /></div>
-              <div className="space-y-2"><Label>Phone 2</Label><Input value={formData.phone_2 || ''} onChange={(event) => setFormData((current) => ({ ...current, phone_2: event.target.value }))} /></div>
-              <div className="space-y-2"><Label>Email</Label><Input value={formData.email || ''} onChange={(event) => setFormData((current) => ({ ...current, email: event.target.value }))} /></div>
-              <div className="space-y-2"><Label>Billing Email</Label><Input value={formData.billing_email || ''} onChange={(event) => setFormData((current) => ({ ...current, billing_email: event.target.value }))} /></div>
-              <div className="space-y-2 md:col-span-2"><Label>Address</Label><Textarea value={formData.address || ''} onChange={(event) => setFormData((current) => ({ ...current, address: event.target.value }))} rows={2} /></div>
-              <div className="space-y-2 md:col-span-2"><Label>Notes</Label><Textarea value={formData.notes || ''} onChange={(event) => setFormData((current) => ({ ...current, notes: event.target.value }))} rows={3} /></div>
+              <div className="space-y-2 md:col-span-2"><Label>Client Name *</Label><Input value={formData.client_name} onChange={(event) => updateField('client_name', event.target.value)} className={errors.client_name ? 'border-red-500' : ''} />{errors.client_name && <p className="text-sm text-red-500">{errors.client_name}</p>}</div>
+              <div className="space-y-2"><Label>Contact Person *</Label><Input value={formData.contact_person || ''} onChange={(event) => updateField('contact_person', event.target.value)} className={errors.contact_person ? 'border-red-500' : ''} />{errors.contact_person && <p className="text-sm text-red-500">{errors.contact_person}</p>}</div>
+              <div className="space-y-2"><Label>Status *</Label><Select value={formData.status} onValueChange={(value) => updateField('status', value)}><SelectTrigger className={errors.status ? 'border-red-500' : ''}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Active</SelectItem><SelectItem value="inactive">Inactive</SelectItem><SelectItem value="prospect">Prospect</SelectItem></SelectContent></Select>{errors.status && <p className="text-sm text-red-500">{errors.status}</p>}</div>
+              <div className="space-y-2"><Label>Phone 1 *</Label><Input value={formData.phone_1 || ''} onChange={(event) => updateField('phone_1', event.target.value)} className={errors.phone_1 ? 'border-red-500' : ''} />{errors.phone_1 && <p className="text-sm text-red-500">{errors.phone_1}</p>}</div>
+              <div className="space-y-2"><Label>Phone 2</Label><Input value={formData.phone_2 || ''} onChange={(event) => updateField('phone_2', event.target.value)} className={errors.phone_2 ? 'border-red-500' : ''} />{errors.phone_2 && <p className="text-sm text-red-500">{errors.phone_2}</p>}</div>
+              <div className="space-y-2"><Label>Email</Label><Input value={formData.email || ''} onChange={(event) => updateField('email', event.target.value)} className={errors.email ? 'border-red-500' : ''} />{errors.email && <p className="text-sm text-red-500">{errors.email}</p>}</div>
+              <div className="space-y-2"><Label>Billing Email</Label><Input value={formData.billing_email || ''} onChange={(event) => updateField('billing_email', event.target.value)} className={errors.billing_email ? 'border-red-500' : ''} />{errors.billing_email && <p className="text-sm text-red-500">{errors.billing_email}</p>}</div>
+              <div className="space-y-2 md:col-span-2"><Label>Address *</Label><Textarea value={formData.address || ''} onChange={(event) => updateField('address', event.target.value)} rows={2} className={errors.address ? 'border-red-500' : ''} />{errors.address && <p className="text-sm text-red-500">{errors.address}</p>}</div>
+              <div className="space-y-2 md:col-span-2"><Label>Notes</Label><Textarea value={formData.notes || ''} onChange={(event) => updateField('notes', event.target.value)} rows={3} /></div>
             </div>
           ) : (
             <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4">

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -17,6 +17,7 @@ import { formatApiError } from '@/utils/errors';
 import { ArrowLeft, Loader2, Save, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import employeeService from '@/services/employeeService';
+import regionService from '@/services/regionService';
 
 const EmployeeCreate = () => {
   const navigate = useNavigate();
@@ -34,14 +35,26 @@ const EmployeeCreate = () => {
     phone_2: '',
     email: '',
     physical_address: '',
-    postal_address: '',
+    region_id: '',
     education_background: '',
-    job_title: '',
+    job_title: 'Security Guard',
     employment_status: 'active',
-    hire_date: '',
-    termination_date: '',
+    date_joined: '',
     notes: '',
   });
+
+  const regionsQuery = useQuery({
+    queryKey: ['regions', 'employee-form'],
+    queryFn: () => regionService.getAll({ status_filter: 'active' }),
+  });
+  const regions = Array.isArray(regionsQuery.data) ? regionsQuery.data : regionsQuery.data?.data || [];
+  const regionPlaceholder = regionsQuery.isLoading
+    ? 'Loading regions...'
+    : regionsQuery.isError
+      ? 'Failed to load regions'
+      : regions.length === 0
+        ? 'No active regions available'
+        : 'Select region';
 
   const createEmployee = useMutation({
     mutationFn: employeeService.create,
@@ -65,7 +78,14 @@ const EmployeeCreate = () => {
     const nextErrors = {};
     if (!formData.first_name.trim()) nextErrors.first_name = 'First name is required';
     if (!formData.last_name.trim()) nextErrors.last_name = 'Last name is required';
+    if (!formData.nationality.trim()) nextErrors.nationality = 'Nationality is required';
     if (!formData.phone_1.trim()) nextErrors.phone_1 = 'Primary phone is required';
+    else if (!/^(\+255|0)[67]\d{8}$/.test(formData.phone_1)) nextErrors.phone_1 = 'Phone number must be a valid Tanzanian number (+255XXXXXXXXX or 0XXXXXXXXX)';
+    if (formData.phone_2 && !/^(\+255|0)[67]\d{8}$/.test(formData.phone_2)) nextErrors.phone_2 = 'Phone number must be a valid Tanzanian number (+255XXXXXXXXX or 0XXXXXXXXX)';
+    if (!formData.physical_address.trim()) nextErrors.physical_address = 'Physical address is required';
+    if (!formData.job_title.trim()) nextErrors.job_title = 'Job title is required';
+    if (!formData.date_joined.trim()) nextErrors.date_joined = 'Date joined is required';
+    if (formData.nin && (!/^\d{20}$/.test(formData.nin))) nextErrors.nin = 'NIN must be exactly 20 digits';
     if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) nextErrors.email = 'Invalid email format';
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
@@ -135,12 +155,32 @@ const EmployeeCreate = () => {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="nationality">Nationality</Label>
-              <Input id="nationality" value={formData.nationality} onChange={(event) => handleChange('nationality', event.target.value)} data-testid="input-nationality" />
+              <Label htmlFor="date_of_birth">Date of Birth</Label>
+              <Input
+                id="date_of_birth"
+                type="date"
+                value={formData.date_of_birth}
+                onChange={(event) => handleChange('date_of_birth', event.target.value)}
+                data-testid="input-date-of-birth"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Nationality *</Label>
+              <Select value={formData.nationality} onValueChange={(value) => handleChange('nationality', value)}>
+                <SelectTrigger className={errors.nationality ? 'border-red-500' : ''} data-testid="select-nationality">
+                  <SelectValue placeholder="Select nationality" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Tanzania">Tanzania</SelectItem>
+                  {/* Add more countries as needed */}
+                </SelectContent>
+              </Select>
+              {errors.nationality && <p className="text-sm text-red-500">{errors.nationality}</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="nin">NIN</Label>
-              <Input id="nin" value={formData.nin} onChange={(event) => handleChange('nin', event.target.value)} data-testid="input-nin" />
+              <Input id="nin" value={formData.nin} onChange={(event) => handleChange('nin', event.target.value)} className={errors.nin ? 'border-red-500' : ''} data-testid="input-nin" />
+              {errors.nin && <p className="text-sm text-red-500">{errors.nin}</p>}
             </div>
             <div className="space-y-2">
               <Label>Marital Status</Label>
@@ -171,7 +211,8 @@ const EmployeeCreate = () => {
             </div>
             <div className="space-y-2">
               <Label htmlFor="phone_2">Secondary Phone</Label>
-              <Input id="phone_2" value={formData.phone_2} onChange={(event) => handleChange('phone_2', event.target.value)} data-testid="input-phone-2" />
+              <Input id="phone_2" value={formData.phone_2} onChange={(event) => handleChange('phone_2', event.target.value)} className={errors.phone_2 ? 'border-red-500' : ''} data-testid="input-phone-2" />
+              {errors.phone_2 && <p className="text-sm text-red-500">{errors.phone_2}</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email Address</Label>
@@ -179,12 +220,22 @@ const EmployeeCreate = () => {
               {errors.email && <p className="text-sm text-red-500">{errors.email}</p>}
             </div>
             <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="physical_address">Physical Address</Label>
-              <Textarea id="physical_address" value={formData.physical_address} onChange={(event) => handleChange('physical_address', event.target.value)} rows={2} data-testid="input-physical-address" />
+              <Label htmlFor="physical_address">Physical Address *</Label>
+              <Textarea id="physical_address" value={formData.physical_address} onChange={(event) => handleChange('physical_address', event.target.value)} rows={2} className={errors.physical_address ? 'border-red-500' : ''} data-testid="input-physical-address" />
+              {errors.physical_address && <p className="text-sm text-red-500">{errors.physical_address}</p>}
             </div>
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="postal_address">Postal Address</Label>
-              <Textarea id="postal_address" value={formData.postal_address} onChange={(event) => handleChange('postal_address', event.target.value)} rows={2} data-testid="input-postal-address" />
+            <div className="space-y-2">
+              <Label htmlFor="region_id">Region</Label>
+              <Select value={formData.region_id} onValueChange={(value) => handleChange('region_id', value)} data-testid="select-region">
+                <SelectTrigger disabled={regionsQuery.isLoading || regionsQuery.isError || regions.length === 0}>
+                  <SelectValue placeholder={regionPlaceholder} />
+                </SelectTrigger>
+                <SelectContent>
+                  {regions.map((r) => (
+                    <SelectItem key={r.id} value={r.id}>{r.region_name} ({r.zone_name})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </CardContent>
         </Card>
@@ -210,15 +261,28 @@ const EmployeeCreate = () => {
             </div>
             <div className="space-y-2">
               <Label htmlFor="job_title">Job Title</Label>
-              <Input id="job_title" value={formData.job_title} onChange={(event) => handleChange('job_title', event.target.value)} data-testid="input-job-title" />
+              <Select value={formData.job_title} onValueChange={(value) => handleChange('job_title', value)}>
+                <SelectTrigger data-testid="select-job-title">
+                  <SelectValue placeholder="Select job title" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Security Guard">Security Guard</SelectItem>
+                  <SelectItem value="Supervisor">Supervisor</SelectItem>
+                  <SelectItem value="Zone Manager">Zone Manager</SelectItem>
+                  <SelectItem value="Manager">Manager</SelectItem>
+                  <SelectItem value="Officer">Officer</SelectItem>
+                  <SelectItem value="Other">Other</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2 md:col-span-2">
               <Label htmlFor="education_background">Education Background</Label>
               <Textarea id="education_background" value={formData.education_background} onChange={(event) => handleChange('education_background', event.target.value)} rows={2} data-testid="input-education-background" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="termination_date">Date Left</Label>
-              <Input id="termination_date" type="date" value={formData.termination_date} onChange={(event) => handleChange('termination_date', event.target.value)} data-testid="input-termination-date" />
+              <Label htmlFor="date_joined">Date Joined *</Label>
+              <Input id="date_joined" type="date" value={formData.date_joined} onChange={(event) => handleChange('date_joined', event.target.value)} className={errors.date_joined ? 'border-red-500' : ''} data-testid="input-date-joined" />
+              {errors.date_joined && <p className="text-sm text-red-500">{errors.date_joined}</p>}
             </div>
             <div className="space-y-2 md:col-span-2 lg:col-span-3">
               <Label htmlFor="notes">Notes</Label>

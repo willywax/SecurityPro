@@ -12,9 +12,11 @@ import { ArrowLeft, Loader2, Save, Trash2, Edit, MapPin, Building2 } from 'lucid
 import { toast } from 'sonner';
 import clientService from '@/services/clientService';
 import siteService from '@/services/siteService';
+import regionService from '@/services/regionService';
 import { formatApiError } from '@/utils/errors';
 
-const emptyForm = { client_id: '', site_name: '', region: '', district: '', ward: '', address: '', contact_person: '', contact_phone: '', status: 'active', notes: '' };
+const emptyForm = { client_id: '', region_id: '', site_name: '', region: '', district: '', ward: '', address: '', contact_person: '', contact_phone: '', status: 'active', notes: '' };
+const phonePattern = /^(\+255|0)[67]\d{8}$/;
 
 const SiteDetail = () => {
   const { id } = useParams();
@@ -23,8 +25,18 @@ const SiteDetail = () => {
   const isCreate = id === 'new' || !id;
   const [editing, setEditing] = useState(isCreate);
   const [formData, setFormData] = useState(emptyForm);
+  const [errors, setErrors] = useState({});
 
   const clientsQuery = useQuery({ queryKey: ['clients', 'site-form'], queryFn: () => clientService.getAll({ page: 1, page_size: 100 }) });
+  const regionsQuery = useQuery({ queryKey: ['regions', 'site-form'], queryFn: () => regionService.getAll({ status_filter: 'active' }) });
+  const regions = Array.isArray(regionsQuery.data) ? regionsQuery.data : regionsQuery.data?.data || [];
+  const regionPlaceholder = regionsQuery.isLoading
+    ? 'Loading regions...'
+    : regionsQuery.isError
+      ? 'Failed to load regions'
+      : regions.length === 0
+        ? 'No active regions available'
+        : 'Select region';
   const siteQuery = useQuery({ queryKey: ['site', id], queryFn: () => siteService.getById(id), enabled: !isCreate });
 
   useEffect(() => {
@@ -32,6 +44,41 @@ const SiteDetail = () => {
       setFormData(siteQuery.data);
     }
   }, [siteQuery.data]);
+
+  const updateField = (field, value) => {
+    setFormData((current) => ({ ...current, [field]: value }));
+    if (errors[field]) {
+      setErrors((current) => ({ ...current, [field]: null }));
+    }
+  };
+
+  const validateForm = () => {
+    const nextErrors = {};
+
+    if (!formData.client_id) nextErrors.client_id = 'Client is required';
+    if (!formData.site_name?.trim()) nextErrors.site_name = 'Site name is required';
+    if (!formData.status) nextErrors.status = 'Status is required';
+    if (formData.contact_phone && !phonePattern.test(formData.contact_phone)) {
+      nextErrors.contact_phone = 'Contact phone must be a valid Tanzanian number (+255XXXXXXXXX or 0XXXXXXXXX)';
+    }
+
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const normalizePayload = (data) => ({
+    client_id: data.client_id,
+    site_name: data.site_name?.trim(),
+    region_id: data.region_id || null,
+    region: data.region?.trim() || null,
+    district: data.district?.trim() || null,
+    ward: data.ward?.trim() || null,
+    address: data.address?.trim() || null,
+    contact_person: data.contact_person?.trim() || null,
+    contact_phone: data.contact_phone?.trim() || null,
+    status: data.status,
+    notes: data.notes?.trim() || null,
+  });
 
   const saveMutation = useMutation({
     mutationFn: (payload) => (isCreate ? siteService.create(payload) : siteService.update(id, payload)),
@@ -76,8 +123,8 @@ const SiteDetail = () => {
         <div className="flex items-center gap-2">
           {editing ? (
             <>
-              <Button variant="outline" onClick={() => { if (isCreate) navigate('/sites'); else { setFormData(site); setEditing(false); } }}>Cancel</Button>
-              <Button onClick={() => saveMutation.mutate(formData)} disabled={saveMutation.isPending} className="bg-[#0F172A] hover:bg-slate-800">{saveMutation.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving...</> : <><Save className="w-4 h-4 mr-2" />{isCreate ? 'Create Site' : 'Save Changes'}</>}</Button>
+              <Button variant="outline" onClick={() => { setErrors({}); if (isCreate) navigate('/sites'); else { setFormData(site); setEditing(false); } }}>Cancel</Button>
+              <Button onClick={() => { if (!validateForm()) return; saveMutation.mutate(normalizePayload(formData)); }} disabled={saveMutation.isPending} className="bg-[#0F172A] hover:bg-slate-800">{saveMutation.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving...</> : <><Save className="w-4 h-4 mr-2" />{isCreate ? 'Create Site' : 'Save Changes'}</>}</Button>
             </>
           ) : (
             <>
@@ -103,26 +150,35 @@ const SiteDetail = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2 md:col-span-2">
                 <Label>Client</Label>
-                <Select value={formData.client_id} onValueChange={(value) => setFormData((current) => ({ ...current, client_id: value }))}>
-                  <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
+                <Select value={formData.client_id} onValueChange={(value) => updateField('client_id', value)}>
+                  <SelectTrigger className={errors.client_id ? 'border-red-500' : ''}><SelectValue placeholder="Select client" /></SelectTrigger>
                   <SelectContent>{clients.map((client) => <SelectItem key={client.id} value={client.id}>{client.client_name}</SelectItem>)}</SelectContent>
                 </Select>
+                {errors.client_id && <p className="text-sm text-red-500">{errors.client_id}</p>}
               </div>
-              <div className="space-y-2 md:col-span-2"><Label>Site Name</Label><Input value={formData.site_name} onChange={(event) => setFormData((current) => ({ ...current, site_name: event.target.value }))} /></div>
-              <div className="space-y-2"><Label>Status</Label><Select value={formData.status} onValueChange={(value) => setFormData((current) => ({ ...current, status: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Active</SelectItem><SelectItem value="inactive">Inactive</SelectItem></SelectContent></Select></div>
-              <div className="space-y-2"><Label>Region</Label><Input value={formData.region || ''} onChange={(event) => setFormData((current) => ({ ...current, region: event.target.value }))} /></div>
-              <div className="space-y-2"><Label>District</Label><Input value={formData.district || ''} onChange={(event) => setFormData((current) => ({ ...current, district: event.target.value }))} /></div>
-              <div className="space-y-2"><Label>Ward</Label><Input value={formData.ward || ''} onChange={(event) => setFormData((current) => ({ ...current, ward: event.target.value }))} /></div>
-              <div className="space-y-2"><Label>Contact Person</Label><Input value={formData.contact_person || ''} onChange={(event) => setFormData((current) => ({ ...current, contact_person: event.target.value }))} /></div>
-              <div className="space-y-2"><Label>Contact Phone</Label><Input value={formData.contact_phone || ''} onChange={(event) => setFormData((current) => ({ ...current, contact_phone: event.target.value }))} /></div>
-              <div className="space-y-2 md:col-span-2"><Label>Address</Label><Textarea value={formData.address || ''} onChange={(event) => setFormData((current) => ({ ...current, address: event.target.value }))} rows={2} /></div>
-              <div className="space-y-2 md:col-span-2"><Label>Notes</Label><Textarea value={formData.notes || ''} onChange={(event) => setFormData((current) => ({ ...current, notes: event.target.value }))} rows={3} /></div>
+              <div className="space-y-2 md:col-span-2"><Label>Site Name</Label><Input value={formData.site_name} onChange={(event) => updateField('site_name', event.target.value)} className={errors.site_name ? 'border-red-500' : ''} />{errors.site_name && <p className="text-sm text-red-500">{errors.site_name}</p>}</div>
+              <div className="space-y-2"><Label>Status</Label><Select value={formData.status} onValueChange={(value) => updateField('status', value)}><SelectTrigger className={errors.status ? 'border-red-500' : ''}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Active</SelectItem><SelectItem value="inactive">Inactive</SelectItem></SelectContent></Select>{errors.status && <p className="text-sm text-red-500">{errors.status}</p>}</div>
+              <div className="space-y-2">
+                <Label>Region</Label>
+                <Select value={formData.region_id || ''} onValueChange={(value) => updateField('region_id', value)}>
+                  <SelectTrigger disabled={regionsQuery.isLoading || regionsQuery.isError || regions.length === 0}><SelectValue placeholder={regionPlaceholder} /></SelectTrigger>
+                  <SelectContent>
+                    {regions.map((r) => <SelectItem key={r.id} value={r.id}>{r.region_name} ({r.zone_name})</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2"><Label>District</Label><Input value={formData.district || ''} onChange={(event) => updateField('district', event.target.value)} /></div>
+              <div className="space-y-2"><Label>Ward</Label><Input value={formData.ward || ''} onChange={(event) => updateField('ward', event.target.value)} /></div>
+              <div className="space-y-2"><Label>Contact Person</Label><Input value={formData.contact_person || ''} onChange={(event) => updateField('contact_person', event.target.value)} /></div>
+              <div className="space-y-2"><Label>Contact Phone</Label><Input value={formData.contact_phone || ''} onChange={(event) => updateField('contact_phone', event.target.value)} className={errors.contact_phone ? 'border-red-500' : ''} />{errors.contact_phone && <p className="text-sm text-red-500">{errors.contact_phone}</p>}</div>
+              <div className="space-y-2 md:col-span-2"><Label>Address</Label><Textarea value={formData.address || ''} onChange={(event) => updateField('address', event.target.value)} rows={2} /></div>
+              <div className="space-y-2 md:col-span-2"><Label>Notes</Label><Textarea value={formData.notes || ''} onChange={(event) => updateField('notes', event.target.value)} rows={3} /></div>
             </div>
           ) : (
             <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4">
               <div><dt className="text-sm font-medium text-slate-500">Site Name</dt><dd className="mt-1 text-sm text-slate-900 font-medium">{site?.site_name}</dd></div>
               <div><dt className="text-sm font-medium text-slate-500">Status</dt><dd className="mt-1"><Badge variant="outline">{site?.status}</Badge></dd></div>
-              <div><dt className="text-sm font-medium text-slate-500">Region</dt><dd className="mt-1 text-sm text-slate-900">{site?.region || '-'}</dd></div>
+              <div><dt className="text-sm font-medium text-slate-500">Region</dt><dd className="mt-1 text-sm text-slate-900">{site?.region_name || site?.region || '-'}{site?.zone_name ? <span className="text-slate-400 text-xs ml-1">({site.zone_name})</span> : null}</dd></div>
               <div><dt className="text-sm font-medium text-slate-500">District</dt><dd className="mt-1 text-sm text-slate-900">{site?.district || '-'}</dd></div>
               <div><dt className="text-sm font-medium text-slate-500">Ward</dt><dd className="mt-1 text-sm text-slate-900">{site?.ward || '-'}</dd></div>
               <div><dt className="text-sm font-medium text-slate-500">Contact Person</dt><dd className="mt-1 text-sm text-slate-900">{site?.contact_person || '-'}</dd></div>

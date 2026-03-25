@@ -9,6 +9,7 @@ import { Badge } from '../components/ui/badge';
 import { Card, CardContent } from '../components/ui/card';
 import { Plus, ChevronLeft, ChevronRight, DollarSign, Loader2 } from 'lucide-react';
 import payrollService from '@/services/payrollService';
+import zoneService from '@/services/zoneService';
 import { formatTZS } from '@/utils/currency';
 
 const statusConfig = {
@@ -27,12 +28,16 @@ const PayrollList = () => {
   const navigate = useNavigate();
   const [monthFilter, setMonthFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [zoneFilter, setZoneFilter] = useState('all');
   const [page, setPage] = useState(1);
   const pageSize = 25;
 
+  const zonesQuery = useQuery({ queryKey: ['zones', 'payroll-filter'], queryFn: () => zoneService.getAll() });
+  const zones = zonesQuery.data || [];
+
   const payrollsQuery = useQuery({
-    queryKey: ['payroll', { page, pageSize, monthFilter, statusFilter }],
-    queryFn: () => payrollService.getAll({ page, page_size: pageSize, month: monthFilter || undefined, status_filter: statusFilter !== 'all' ? statusFilter : undefined }),
+    queryKey: ['payroll', { page, pageSize, monthFilter, statusFilter, zoneFilter }],
+    queryFn: () => payrollService.getAll({ page, page_size: pageSize, month: monthFilter || undefined, status_filter: statusFilter !== 'all' ? statusFilter : undefined, zone_id: zoneFilter !== 'all' ? zoneFilter : undefined }),
   });
 
   const payrolls = payrollsQuery.data?.data || [];
@@ -55,6 +60,13 @@ const PayrollList = () => {
           <SelectTrigger className="w-full sm:w-[160px]"><SelectValue placeholder="All Statuses" /></SelectTrigger>
           <SelectContent><SelectItem value="all">All Statuses</SelectItem>{Object.entries(statusConfig).map(([value, config]) => <SelectItem key={value} value={value}>{config.label}</SelectItem>)}</SelectContent>
         </Select>
+        <Select value={zoneFilter} onValueChange={(value) => { setZoneFilter(value); setPage(1); }}>
+          <SelectTrigger className="w-full sm:w-[160px]"><SelectValue placeholder="All Zones" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Zones</SelectItem>
+            {zones.map((z) => <SelectItem key={z.id} value={z.id}>{z.zone_name}</SelectItem>)}
+          </SelectContent>
+        </Select>
       </div>
 
       {payrollsQuery.isLoading ? (
@@ -65,13 +77,14 @@ const PayrollList = () => {
         <>
           <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
             <Table>
-              <TableHeader><TableRow className="bg-slate-50"><TableHead className="font-semibold">Employee</TableHead><TableHead className="font-semibold">Payroll ID</TableHead><TableHead className="font-semibold">Month</TableHead><TableHead className="font-semibold text-right">Base Salary</TableHead><TableHead className="font-semibold text-right">Net Pay</TableHead><TableHead className="font-semibold">Status</TableHead></TableRow></TableHeader>
+              <TableHeader><TableRow className="bg-slate-50"><TableHead className="font-semibold">Employee</TableHead><TableHead className="font-semibold">Payroll ID</TableHead><TableHead className="font-semibold">Month</TableHead><TableHead className="font-semibold">Zone</TableHead><TableHead className="font-semibold text-right">Base Salary</TableHead><TableHead className="font-semibold text-right">Net Pay</TableHead><TableHead className="font-semibold">Status</TableHead></TableRow></TableHeader>
               <TableBody>
                 {payrolls.map((payroll) => (
                   <TableRow key={payroll.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => navigate(`/payroll/${payroll.id}`)}>
                     <TableCell><div><p className="font-medium text-slate-900">{payroll.employee_name || 'Unknown'}</p><p className="text-xs text-slate-500 font-mono">{payroll.employee_code || ''}</p></div></TableCell>
                     <TableCell><span className="font-mono text-sm text-slate-600">{payroll.payroll_id}</span></TableCell>
                     <TableCell>{fmtMonth(payroll.payroll_month)}</TableCell>
+                    <TableCell>{payroll.zone_name || '-'}</TableCell>
                     <TableCell className="text-right">{formatTZS(payroll.base_salary)}</TableCell>
                     <TableCell className="text-right font-semibold">{formatTZS(payroll.net_pay)}</TableCell>
                     <TableCell><Badge variant="outline" className={statusConfig[payroll.status]?.badge}>{statusConfig[payroll.status]?.label || payroll.status}</Badge></TableCell>

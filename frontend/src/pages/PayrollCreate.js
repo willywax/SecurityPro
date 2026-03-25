@@ -44,9 +44,11 @@ const computeNet = (base, allowances, overtime, deductions) =>
 
 const SingleEntryForm = ({ api, onSuccess }) => {
   const [employees, setEmployees] = useState([]);
+  const [zones, setZones] = useState([]);
   const [form, setForm] = useState({
     employee_id: '',
     payroll_month: '',
+    zone_id: '',
     base_salary: '',
     allowances: '0',
     deductions: '0',
@@ -60,6 +62,9 @@ const SingleEntryForm = ({ api, onSuccess }) => {
   useEffect(() => {
     api.get('/employees?page_size=100&status_filter=active')
       .then(r => setEmployees(r.data.employees || []))
+      .catch(() => {});
+    api.get('/zones')
+      .then(r => setZones(Array.isArray(r.data) ? r.data : []))
       .catch(() => {});
   }, [api]);
 
@@ -85,6 +90,7 @@ const SingleEntryForm = ({ api, onSuccess }) => {
       const payload = {
         employee_id: form.employee_id,
         payroll_month: form.payroll_month,
+        zone_id: form.zone_id || null,
         base_salary: parseFloat(form.base_salary),
         allowances: parseFloat(form.allowances) || 0,
         deductions: parseFloat(form.deductions) || 0,
@@ -142,6 +148,20 @@ const SingleEntryForm = ({ api, onSuccess }) => {
               data-testid="input-payroll-month"
             />
             {errors.payroll_month && <p className="text-sm text-red-500">{errors.payroll_month}</p>}
+          </div>
+
+          <div className="space-y-2">
+            <Label>Zone</Label>
+            <Select value={form.zone_id} onValueChange={v => set('zone_id', v)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select zone (optional)" />
+              </SelectTrigger>
+              <SelectContent>
+                {zones.map(z => (
+                  <SelectItem key={z.id} value={z.id}>{z.zone_name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-2">
