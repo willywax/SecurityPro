@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs grep:*)",
+      "Bash(grep -r \"branch_id\\\\|Branch\" /c/Users/LENOVO/Documents/PROGRAMMING/SRCOps/SecurityPro/backend/models --include=*.py)",
+      "Bash(grep -r \"class.*Router\\\\|router.*=\" /c/Users/LENOVO/Documents/PROGRAMMING/SRCOps/SecurityPro/backend/routers --include=*.py)"
+    ]
+  }
+}

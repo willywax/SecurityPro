@@ -296,7 +296,7 @@ async def enrich_invoice_with_client(
 
 # ============ ENDPOINTS ============
 
-@router.get("/", response_model=InvoiceListResponse)
+@router.get("", response_model=InvoiceListResponse)
 async def list_invoices(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
@@ -359,7 +359,7 @@ async def list_invoices(
     )
 
 
-@router.post("/", response_model=InvoiceResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=InvoiceResponse, status_code=status.HTTP_201_CREATED)
 async def create_invoice(
     data: InvoiceCreate,
     db: AsyncSession = Depends(get_db),

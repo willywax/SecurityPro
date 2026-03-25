@@ -13,6 +13,7 @@ import uuid
 from db.dependencies import get_db
 from models.site import Site
 from models.client import Client
+from models.zone import Region, Zone
 from models.enums import SiteStatus
 from utils.auth import get_token_data
 
@@ -24,6 +25,7 @@ router = APIRouter(prefix="/sites", tags=["Sites"])
 class SiteCreate(BaseModel):
     client_id: UUID
     site_name: str
+    region_id: Optional[UUID] = None
     region: Optional[str] = None
     district: Optional[str] = None
     ward: Optional[str] = None
@@ -37,6 +39,7 @@ class SiteCreate(BaseModel):
 class SiteUpdate(BaseModel):
     client_id: Optional[UUID] = None
     site_name: Optional[str] = None
+    region_id: Optional[UUID] = None
     region: Optional[str] = None
     district: Optional[str] = None
     ward: Optional[str] = None
@@ -54,6 +57,9 @@ class SiteResponse(BaseModel):
     client_id: UUID
     client_name: Optional[str] = None
     site_name: str
+    region_id: Optional[UUID] = None
+    region_name: Optional[str] = None
+    zone_name: Optional[str] = None
     region: Optional[str] = None
     district: Optional[str] = None
     ward: Optional[str] = None
@@ -84,6 +90,25 @@ class MessageResponse(BaseModel):
 
 # ============ HELPERS ============
 
+async def enrich_site(db: AsyncSession, site: Site, client=None) -> SiteResponse:
+    """Enrich a site with client name and region/zone names."""
+    data = SiteResponse.model_validate(site)
+    if client:
+        data.client_name = client.client_name
+    elif site.client_id:
+        c = (await db.execute(select(Client).where(Client.id == site.client_id))).scalar_one_or_none()
+        if c:
+            data.client_name = c.client_name
+    if site.region_id:
+        region = (await db.execute(select(Region).where(Region.id == site.region_id))).scalar_one_or_none()
+        if region:
+            data.region_name = region.region_name
+            zone = (await db.execute(select(Zone).where(Zone.id == region.zone_id))).scalar_one_or_none()
+            if zone:
+                data.zone_name = zone.zone_name
+    return data
+
+
 async def generate_site_id(db: AsyncSession, org_id: UUID) -> str:
     """Generate auto-incrementing site ID like SITE001"""
     result = await db.execute(
@@ -106,7 +131,7 @@ async def generate_site_id(db: AsyncSession, org_id: UUID) -> str:
 
 # ============ CRUD ENDPOINTS ============
 
-@router.post("/", response_model=SiteResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=SiteResponse, status_code=status.HTTP_201_CREATED)
 async def create_site(
     site: SiteCreate,
     db: AsyncSession = Depends(get_db),
@@ -139,20 +164,17 @@ async def create_site(
     await db.commit()
     await db.refresh(new_site)
 
-    # Add client name to response
-    response_data = SiteResponse.model_validate(new_site)
-    response_data.client_name = client.client_name
-
-    return response_data
+    return await enrich_site(db, new_site, client)
 
 
-@router.get("/", response_model=SiteListResponse)
+@router.get("", response_model=SiteListResponse)
 async def get_sites(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     search: Optional[str] = None,
     client_id: Optional[UUID] = None,
     status_filter: Optional[SiteStatus] = None,
+    region_id: Optional[UUID] = None,
     db: AsyncSession = Depends(get_db),
     token_data: dict = Depends(get_token_data)
 ):
@@ -172,6 +194,8 @@ async def get_sites(
         query = query.where(Site.client_id == client_id)
     if status_filter:
         query = query.where(Site.status == status_filter)
+    if region_id:
+        query = query.where(Site.region_id == region_id)
 
     # Count total
     count_query = select(func.count()).select_from(query.subquery())
@@ -185,18 +209,7 @@ async def get_sites(
     result = await db.execute(query)
     sites = result.scalars().all()
 
-    # Enrich with client names
-    site_responses = []
-    for site in sites:
-        client_result = await db.execute(
-            select(Client).where(Client.id == site.client_id)
-        )
-        client = client_result.scalar_one_or_none()
-
-        site_data = SiteResponse.model_validate(site)
-        if client:
-            site_data.client_name = client.client_name
-        site_responses.append(site_data)
+    site_responses = [await enrich_site(db, s) for s in sites]
 
     return SiteListResponse(
         sites=site_responses,
@@ -224,17 +237,7 @@ async def get_site(
     if not site:
         raise HTTPException(status_code=404, detail="Site not found")
 
-    # Get client name
-    client_result = await db.execute(
-        select(Client).where(Client.id == site.client_id)
-    )
-    client = client_result.scalar_one_or_none()
-
-    response_data = SiteResponse.model_validate(site)
-    if client:
-        response_data.client_name = client.client_name
-
-    return response_data
+    return await enrich_site(db, site)
 
 
 @router.put("/{site_id}", response_model=SiteResponse)
@@ -272,17 +275,7 @@ async def update_site(
     await db.commit()
     await db.refresh(site)
 
-    # Get client name
-    client_result = await db.execute(
-        select(Client).where(Client.id == site.client_id)
-    )
-    client = client_result.scalar_one_or_none()
-
-    response_data = SiteResponse.model_validate(site)
-    if client:
-        response_data.client_name = client.client_name
-
-    return response_data
+    return await enrich_site(db, site)
 
 
 @router.delete("/{site_id}", response_model=MessageResponse)

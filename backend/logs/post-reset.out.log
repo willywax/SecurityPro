@@ -1,0 +1,373 @@
+Starting database seeding...
+2026-03-25 07:52:13,775 INFO sqlalchemy.engine.Engine select pg_catalog.version()
+2026-03-25 07:52:13,778 INFO sqlalchemy.engine.Engine [raw sql] ()
+2026-03-25 07:52:13,786 INFO sqlalchemy.engine.Engine select current_schema()
+2026-03-25 07:52:13,788 INFO sqlalchemy.engine.Engine [raw sql] ()
+2026-03-25 07:52:13,793 INFO sqlalchemy.engine.Engine show standard_conforming_strings
+2026-03-25 07:52:13,796 INFO sqlalchemy.engine.Engine [raw sql] ()
+2026-03-25 07:52:13,800 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-03-25 07:52:14,032 INFO sqlalchemy.engine.Engine SELECT organizations.name, organizations.slug, organizations.logo_url, organizations.accent_color, organizations.address, organizations.phone, organizations.email, organizations.website, organizations.is_active, organizations.bank_details, organizations.id, organizations.org_id, organizations.created_at, organizations.updated_at, organizations.created_by 
+FROM organizations 
+WHERE organizations.slug = $1::VARCHAR
+2026-03-25 07:52:14,034 INFO sqlalchemy.engine.Engine [generated in 0.00205s] ('secureops-demo',)
+Organization already exists. Using existing organization...
+Skipping organization and user creation (already exist)
+2026-03-25 07:52:14,048 INFO sqlalchemy.engine.Engine DELETE FROM regions WHERE regions.org_id = $1::UUID
+2026-03-25 07:52:14,049 INFO sqlalchemy.engine.Engine [generated in 0.00175s] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'),)
+2026-03-25 07:52:14,076 INFO sqlalchemy.engine.Engine DELETE FROM zone_managers WHERE zone_managers.org_id = $1::UUID
+2026-03-25 07:52:14,077 INFO sqlalchemy.engine.Engine [generated in 0.00125s] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'),)
+2026-03-25 07:52:14,085 INFO sqlalchemy.engine.Engine DELETE FROM zones WHERE zones.org_id = $1::UUID
+2026-03-25 07:52:14,086 INFO sqlalchemy.engine.Engine [generated in 0.00118s] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'),)
+Cleared existing zones/regions
+2026-03-25 07:52:14,107 INFO sqlalchemy.engine.Engine INSERT INTO zones (zone_name, notes, status, id, org_id, created_by) VALUES ($1::VARCHAR, $2::VARCHAR, $3, $4::UUID, $5::UUID, $6::UUID) RETURNING zones.created_at, zones.updated_at
+2026-03-25 07:52:14,108 INFO sqlalchemy.engine.Engine [generated in 0.00159s] ('Zone 1', 'Zone 1 - contains 3 regions', 'ACTIVE', UUID('c58a8035-0f39-4536-8f38-a9b508947d43'), UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), None)
+Created Zone 1 with regions: Musoma, Mwanza, Simiyu
+2026-03-25 07:52:14,155 INFO sqlalchemy.engine.Engine INSERT INTO zones (zone_name, notes, status, id, org_id, created_by) VALUES ($1::VARCHAR, $2::VARCHAR, $3, $4::UUID, $5::UUID, $6::UUID) RETURNING zones.created_at, zones.updated_at
+2026-03-25 07:52:14,156 INFO sqlalchemy.engine.Engine [cached since 0.04958s ago] ('Zone 2', 'Zone 2 - contains 4 regions', 'ACTIVE', UUID('fbfb6e47-acf9-497a-8d36-25b987779626'), UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), None)
+2026-03-25 07:52:14,162 INFO sqlalchemy.engine.Engine INSERT INTO regions (zone_id, region_name, notes, status, id, org_id, created_by) VALUES ($1::UUID, $2::VARCHAR, $3::VARCHAR, $4, $5::UUID, $6::UUID, $7::UUID), ($8::UUID, $9::VARCHAR, $10::VARCHAR, $11, $12::UUID, $13::UUID, $14::UUID), ($15::UUID, $16::VARCHAR, $17::VARCHAR, $18, $19::UUID, $20::UUID, $21::UUID) RETURNING regions.created_at, regions.updated_at, regions.id
+2026-03-25 07:52:14,163 INFO sqlalchemy.engine.Engine [generated in 0.00036s (insertmanyvalues) 1/1 (ordered)] (UUID('c58a8035-0f39-4536-8f38-a9b508947d43'), 'Musoma', 'Musoma region - Zone 1', 'ACTIVE', UUID('151237e6-fd60-4d4b-a83f-8b710bfb4671'), UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), None, UUID('c58a8035-0f39-4536-8f38-a9b508947d43'), 'Mwanza', 'Mwanza region - Zone 1', 'ACTIVE', UUID('9b082de0-c7ff-4d79-b178-e00ee101a883'), UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), None, UUID('c58a8035-0f39-4536-8f38-a9b508947d43'), 'Simiyu', 'Simiyu region - Zone 1', 'ACTIVE', UUID('a0af97eb-e992-4de5-877b-0416e05a4729'), UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), None)
+Created Zone 2 with regions: Shinyanga, Tabora, Singida, Kigoma
+2026-03-25 07:52:14,182 INFO sqlalchemy.engine.Engine INSERT INTO zones (zone_name, notes, status, id, org_id, created_by) VALUES ($1::VARCHAR, $2::VARCHAR, $3, $4::UUID, $5::UUID, $6::UUID) RETURNING zones.created_at, zones.updated_at
+2026-03-25 07:52:14,184 INFO sqlalchemy.engine.Engine [cached since 0.0771s ago] ('Zone 3', 'Zone 3 - contains 2 regions', 'ACTIVE', UUID('ecd6f6d4-4648-4742-b2e6-f20dbb61d5f4'), UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), None)
+2026-03-25 07:52:14,187 INFO sqlalchemy.engine.Engine INSERT INTO regions (zone_id, region_name, notes, status, id, org_id, created_by) VALUES ($1::UUID, $2::VARCHAR, $3::VARCHAR, $4, $5::UUID, $6::UUID, $7::UUID), ($8::UUID, $9::VARCHAR, $10::VARCHAR, $11, $12::UUID, $13::UUID, $14::UUID), ($15::UUID, $16::VARCHAR, $17::VARCHAR, $18, $19::UUID, $20::UUID, $21::UUID), ($22::UUID, $23::VARCHAR, $24::VARCHAR, $25, $26::UUID, $27::UUID, $28::UUID) RETURNING regions.created_at, regions.updated_at, regions.id
+2026-03-25 07:52:14,188 INFO sqlalchemy.engine.Engine [cached since 0.02572s ago (insertmanyvalues) 1/1 (ordered)] (UUID('fbfb6e47-acf9-497a-8d36-25b987779626'), 'Shinyanga', 'Shinyanga region - Zone 2', 'ACTIVE', UUID('6a586f53-4c45-4033-9089-f6aba7fe9132'), UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), None, UUID('fbfb6e47-acf9-497a-8d36-25b987779626'), 'Tabora', 'Tabora region - Zone 2', 'ACTIVE', UUID('79e63375-d520-422e-8c1b-98ad4c190faa'), UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), None, UUID('fbfb6e47-acf9-497a-8d36-25b987779626'), 'Singida', 'Singida region - Zone 2', 'ACTIVE', UUID('bb3335cc-1376-4845-a815-e997dd6b262b'), UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), None, UUID('fbfb6e47-acf9-497a-8d36-25b987779626'), 'Kigoma', 'Kigoma region - Zone 2', 'ACTIVE', UUID('036c0ed0-98c3-4eae-b9b7-cf5e3679093e'), UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), None)
+Created Zone 3 with regions: Dar es Salaam, Karatu
+2026-03-25 07:52:14,195 INFO sqlalchemy.engine.Engine INSERT INTO regions (zone_id, region_name, notes, status, id, org_id, created_by) VALUES ($1::UUID, $2::VARCHAR, $3::VARCHAR, $4, $5::UUID, $6::UUID, $7::UUID), ($8::UUID, $9::VARCHAR, $10::VARCHAR, $11, $12::UUID, $13::UUID, $14::UUID) RETURNING regions.created_at, regions.updated_at, regions.id
+2026-03-25 07:52:14,196 INFO sqlalchemy.engine.Engine [cached since 0.0333s ago (insertmanyvalues) 1/1 (ordered)] (UUID('ecd6f6d4-4648-4742-b2e6-f20dbb61d5f4'), 'Dar es Salaam', 'Dar es Salaam region - Zone 3', 'ACTIVE', UUID('8a8bd5cc-88e5-4e49-b507-32fc3b1542c5'), UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), None, UUID('ecd6f6d4-4648-4742-b2e6-f20dbb61d5f4'), 'Karatu', 'Karatu region - Zone 3', 'ACTIVE', UUID('38a2054a-3433-45b6-bf5a-48ffdd9b41f5'), UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), None)
+2026-03-25 07:52:14,200 INFO sqlalchemy.engine.Engine COMMIT
+Committed zones and regions
+
+Database seeding complete!
+
+Admin Login: admin@securityops.com
+Password: Admin123!
+2026-03-25 07:52:14,548 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-03-25 07:52:14,551 INFO sqlalchemy.engine.Engine SELECT users.email, users.password_hash, users.first_name, users.last_name, users.role, users.is_active, users.last_login, users.employee_id, users.id, users.org_id, users.created_at, users.updated_at, users.created_by 
+FROM users 
+WHERE users.email = $1::VARCHAR
+2026-03-25 07:52:14,552 INFO sqlalchemy.engine.Engine [generated in 0.00080s] ('admin@securityops.com',)
+2026-03-25 07:52:14,962 INFO sqlalchemy.engine.Engine SELECT organizations.name, organizations.slug, organizations.logo_url, organizations.accent_color, organizations.address, organizations.phone, organizations.email, organizations.website, organizations.is_active, organizations.bank_details, organizations.id, organizations.org_id, organizations.created_at, organizations.updated_at, organizations.created_by 
+FROM organizations 
+WHERE organizations.id = $1::UUID
+2026-03-25 07:52:14,963 INFO sqlalchemy.engine.Engine [generated in 0.00124s] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'),)
+2026-03-25 07:52:14,978 INFO sqlalchemy.engine.Engine UPDATE users SET last_login=$1::TIMESTAMP WITH TIME ZONE, updated_at=now() WHERE users.id = $2::UUID
+2026-03-25 07:52:14,979 INFO sqlalchemy.engine.Engine [generated in 0.00093s] (datetime.datetime(2026, 3, 25, 4, 52, 14, 975801, tzinfo=datetime.timezone.utc), UUID('c623a1bd-4ac1-4e52-8461-8a8b38e07327'))
+2026-03-25 07:52:14,983 INFO sqlalchemy.engine.Engine INSERT INTO refresh_tokens (user_id, token, expires_at, is_revoked, id, org_id, created_by) VALUES ($1::UUID, $2::VARCHAR, $3::TIMESTAMP WITH TIME ZONE, $4::BOOLEAN, $5::UUID, $6::UUID, $7::UUID) RETURNING refresh_tokens.created_at, refresh_tokens.updated_at
+2026-03-25 07:52:14,984 INFO sqlalchemy.engine.Engine [generated in 0.00117s] (UUID('c623a1bd-4ac1-4e52-8461-8a8b38e07327'), 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjNjIzYTFiZC00YWMxLTRlNTItODQ2MS04YThiMzhlMDczMjciLCJlbWFpbCI6ImFkbWluQHNlY3VyaXR5b3BzLmNvbSIsIm9yZ19p ... (17 characters truncated) ... TY2ZmItNDQ2Ny04ZmQ2LTQxZDgzZjE1ZTIzNyIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3NTAxOTEzNCwidHlwZSI6InJlZnJlc2gifQ.eYIjY8AroqQ5yZk54-0AXysaGSxKiHRJT7SP_tbbAPA', datetime.datetime(2026, 4, 1, 4, 52, 14, 975632, tzinfo=datetime.timezone.utc), False, UUID('10534a87-ba60-4d33-a16b-8bb2d0b3f1d4'), UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), None)
+2026-03-25 07:52:14,991 INFO sqlalchemy.engine.Engine COMMIT
+2026-03-25 07:52:14,994 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-03-25 07:52:14,997 INFO sqlalchemy.engine.Engine SELECT users.email, users.password_hash, users.first_name, users.last_name, users.role, users.is_active, users.last_login, users.employee_id, users.id, users.org_id, users.created_at, users.updated_at, users.created_by 
+FROM users 
+WHERE users.id = $1::UUID
+2026-03-25 07:52:14,998 INFO sqlalchemy.engine.Engine [generated in 0.00096s] (UUID('c623a1bd-4ac1-4e52-8461-8a8b38e07327'),)
+2026-03-25 07:52:15,001 INFO sqlalchemy.engine.Engine COMMIT
+INFO:     127.0.0.1:56798 - "POST /api/auth/login HTTP/1.1" 200 OK
+2026-03-25 07:52:15,051 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-03-25 07:52:15,056 INFO sqlalchemy.engine.Engine SELECT count(*) AS count_1 
+FROM (SELECT employees.employee_id AS employee_id, employees.guard_no AS guard_no, employees.profile_photo AS profile_photo, employees.first_name AS first_name, employees.middle_name AS middle_name, employees.last_name AS last_name, employees.gender AS gender, employees.date_of_birth AS date_of_birth, employees.marital_status AS marital_status, employees.nationality AS nationality, employees.nin AS nin, employees.phone_1 AS phone_1, employees.phone_2 AS phone_2, employees.email AS email, employees.physical_address AS physical_address, employees.region AS region, employees.region_id AS region_id, employees.postal_address AS postal_address, employees.education_background AS education_background, employees.job_title AS job_title, employees.employment_status AS employment_status, employees.hire_date AS hire_date, employees.termination_date AS termination_date, employees.notes AS notes, employees.id AS id, employees.org_id AS org_id, employees.created_at AS created_at, employees.updated_at AS updated_at, employees.created_by AS created_by 
+FROM employees 
+WHERE employees.org_id = $1::UUID) AS anon_1
+2026-03-25 07:52:15,057 INFO sqlalchemy.engine.Engine [generated in 0.00088s] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'),)
+2026-03-25 07:52:15,062 INFO sqlalchemy.engine.Engine SELECT employees.employee_id, employees.guard_no, employees.profile_photo, employees.first_name, employees.middle_name, employees.last_name, employees.gender, employees.date_of_birth, employees.marital_status, employees.nationality, employees.nin, employees.phone_1, employees.phone_2, employees.email, employees.physical_address, employees.region, employees.region_id, employees.postal_address, employees.education_background, employees.job_title, employees.employment_status, employees.hire_date, employees.termination_date, employees.notes, employees.id, employees.org_id, employees.created_at, employees.updated_at, employees.created_by 
+FROM employees 
+WHERE employees.org_id = $1::UUID ORDER BY employees.created_at DESC 
+ LIMIT $2::INTEGER OFFSET $3::INTEGER
+2026-03-25 07:52:15,063 INFO sqlalchemy.engine.Engine [generated in 0.00098s] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), 50, 0)
+2026-03-25 07:52:15,074 INFO sqlalchemy.engine.Engine COMMIT
+INFO:     127.0.0.1:56798 - "GET /api/employees HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56798 - "GET /api/regions?status_filter=active HTTP/1.1" 200 OK
+2026-03-25 07:52:15,095 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-03-25 07:52:15,098 INFO sqlalchemy.engine.Engine SELECT zones.zone_name, zones.notes, zones.status, zones.id, zones.org_id, zones.created_at, zones.updated_at, zones.created_by 
+FROM zones 
+WHERE zones.org_id = $1::UUID AND zones.status = $2 ORDER BY zones.zone_name
+2026-03-25 07:52:15,099 INFO sqlalchemy.engine.Engine [generated in 0.00143s] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), 'ACTIVE')
+2026-03-25 07:52:15,103 INFO sqlalchemy.engine.Engine SELECT regions.id 
+FROM regions 
+WHERE regions.zone_id = $1::UUID AND regions.org_id = $2::UUID
+2026-03-25 07:52:15,104 INFO sqlalchemy.engine.Engine [generated in 0.00106s] (UUID('c58a8035-0f39-4536-8f38-a9b508947d43'), UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'))
+2026-03-25 07:52:15,107 INFO sqlalchemy.engine.Engine SELECT count(*) AS count_1 
+FROM employees 
+WHERE employees.region_id IN ($2::UUID, $3::UUID, $4::UUID) AND employees.org_id = $1::UUID
+2026-03-25 07:52:15,108 INFO sqlalchemy.engine.Engine [generated in 0.00107s] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), UUID('151237e6-fd60-4d4b-a83f-8b710bfb4671'), UUID('9b082de0-c7ff-4d79-b178-e00ee101a883'), UUID('a0af97eb-e992-4de5-877b-0416e05a4729'))
+2026-03-25 07:52:15,112 INFO sqlalchemy.engine.Engine SELECT count(*) AS count_1 
+FROM sites 
+WHERE sites.region_id IN ($2::UUID, $3::UUID, $4::UUID) AND sites.org_id = $1::UUID
+2026-03-25 07:52:15,113 INFO sqlalchemy.engine.Engine [generated in 0.00146s] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), UUID('151237e6-fd60-4d4b-a83f-8b710bfb4671'), UUID('9b082de0-c7ff-4d79-b178-e00ee101a883'), UUID('a0af97eb-e992-4de5-877b-0416e05a4729'))
+2026-03-25 07:52:15,118 INFO sqlalchemy.engine.Engine SELECT zone_managers.zone_id, zone_managers.employee_id, zone_managers.assigned_date, zone_managers.end_date, zone_managers.active, zone_managers.id, zone_managers.org_id, zone_managers.created_at, zone_managers.updated_at, zone_managers.created_by, employees.employee_id AS employee_id_1, employees.guard_no, employees.profile_photo, employees.first_name, employees.middle_name, employees.last_name, employees.gender, employees.date_of_birth, employees.marital_status, employees.nationality, employees.nin, employees.phone_1, employees.phone_2, employees.email, employees.physical_address, employees.region, employees.region_id, employees.postal_address, employees.education_background, employees.job_title, employees.employment_status, employees.hire_date, employees.termination_date, employees.notes, employees.id AS id_1, employees.org_id AS org_id_1, employees.created_at AS created_at_1, employees.updated_at AS updated_at_1, employees.created_by AS created_by_1 
+FROM zone_managers JOIN employees ON zone_managers.employee_id = employees.id 
+WHERE zone_managers.zone_id = $1::UUID
+2026-03-25 07:52:15,119 INFO sqlalchemy.engine.Engine [generated in 0.00102s] (UUID('c58a8035-0f39-4536-8f38-a9b508947d43'),)
+2026-03-25 07:52:15,123 INFO sqlalchemy.engine.Engine SELECT regions.id 
+FROM regions 
+WHERE regions.zone_id = $1::UUID AND regions.org_id = $2::UUID
+2026-03-25 07:52:15,124 INFO sqlalchemy.engine.Engine [cached since 0.02061s ago] (UUID('fbfb6e47-acf9-497a-8d36-25b987779626'), UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'))
+2026-03-25 07:52:15,126 INFO sqlalchemy.engine.Engine SELECT count(*) AS count_1 
+FROM employees 
+WHERE employees.region_id IN ($2::UUID, $3::UUID, $4::UUID, $5::UUID) AND employees.org_id = $1::UUID
+2026-03-25 07:52:15,127 INFO sqlalchemy.engine.Engine [cached since 0.01967s ago] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), UUID('6a586f53-4c45-4033-9089-f6aba7fe9132'), UUID('79e63375-d520-422e-8c1b-98ad4c190faa'), UUID('bb3335cc-1376-4845-a815-e997dd6b262b'), UUID('036c0ed0-98c3-4eae-b9b7-cf5e3679093e'))
+2026-03-25 07:52:15,130 INFO sqlalchemy.engine.Engine SELECT count(*) AS count_1 
+FROM sites 
+WHERE sites.region_id IN ($2::UUID, $3::UUID, $4::UUID, $5::UUID) AND sites.org_id = $1::UUID
+2026-03-25 07:52:15,132 INFO sqlalchemy.engine.Engine [cached since 0.01981s ago] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), UUID('6a586f53-4c45-4033-9089-f6aba7fe9132'), UUID('79e63375-d520-422e-8c1b-98ad4c190faa'), UUID('bb3335cc-1376-4845-a815-e997dd6b262b'), UUID('036c0ed0-98c3-4eae-b9b7-cf5e3679093e'))
+2026-03-25 07:52:15,135 INFO sqlalchemy.engine.Engine SELECT zone_managers.zone_id, zone_managers.employee_id, zone_managers.assigned_date, zone_managers.end_date, zone_managers.active, zone_managers.id, zone_managers.org_id, zone_managers.created_at, zone_managers.updated_at, zone_managers.created_by, employees.employee_id AS employee_id_1, employees.guard_no, employees.profile_photo, employees.first_name, employees.middle_name, employees.last_name, employees.gender, employees.date_of_birth, employees.marital_status, employees.nationality, employees.nin, employees.phone_1, employees.phone_2, employees.email, employees.physical_address, employees.region, employees.region_id, employees.postal_address, employees.education_background, employees.job_title, employees.employment_status, employees.hire_date, employees.termination_date, employees.notes, employees.id AS id_1, employees.org_id AS org_id_1, employees.created_at AS created_at_1, employees.updated_at AS updated_at_1, employees.created_by AS created_by_1 
+FROM zone_managers JOIN employees ON zone_managers.employee_id = employees.id 
+WHERE zone_managers.zone_id = $1::UUID
+2026-03-25 07:52:15,136 INFO sqlalchemy.engine.Engine [cached since 0.01784s ago] (UUID('fbfb6e47-acf9-497a-8d36-25b987779626'),)
+2026-03-25 07:52:15,138 INFO sqlalchemy.engine.Engine SELECT regions.id 
+FROM regions 
+WHERE regions.zone_id = $1::UUID AND regions.org_id = $2::UUID
+2026-03-25 07:52:15,139 INFO sqlalchemy.engine.Engine [cached since 0.03586s ago] (UUID('ecd6f6d4-4648-4742-b2e6-f20dbb61d5f4'), UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'))
+2026-03-25 07:52:15,141 INFO sqlalchemy.engine.Engine SELECT count(*) AS count_1 
+FROM employees 
+WHERE employees.region_id IN ($2::UUID, $3::UUID) AND employees.org_id = $1::UUID
+2026-03-25 07:52:15,142 INFO sqlalchemy.engine.Engine [cached since 0.0347s ago] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), UUID('8a8bd5cc-88e5-4e49-b507-32fc3b1542c5'), UUID('38a2054a-3433-45b6-bf5a-48ffdd9b41f5'))
+2026-03-25 07:52:15,145 INFO sqlalchemy.engine.Engine SELECT count(*) AS count_1 
+FROM sites 
+WHERE sites.region_id IN ($2::UUID, $3::UUID) AND sites.org_id = $1::UUID
+2026-03-25 07:52:15,146 INFO sqlalchemy.engine.Engine [cached since 0.03459s ago] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), UUID('8a8bd5cc-88e5-4e49-b507-32fc3b1542c5'), UUID('38a2054a-3433-45b6-bf5a-48ffdd9b41f5'))
+2026-03-25 07:52:15,149 INFO sqlalchemy.engine.Engine SELECT zone_managers.zone_id, zone_managers.employee_id, zone_managers.assigned_date, zone_managers.end_date, zone_managers.active, zone_managers.id, zone_managers.org_id, zone_managers.created_at, zone_managers.updated_at, zone_managers.created_by, employees.employee_id AS employee_id_1, employees.guard_no, employees.profile_photo, employees.first_name, employees.middle_name, employees.last_name, employees.gender, employees.date_of_birth, employees.marital_status, employees.nationality, employees.nin, employees.phone_1, employees.phone_2, employees.email, employees.physical_address, employees.region, employees.region_id, employees.postal_address, employees.education_background, employees.job_title, employees.employment_status, employees.hire_date, employees.termination_date, employees.notes, employees.id AS id_1, employees.org_id AS org_id_1, employees.created_at AS created_at_1, employees.updated_at AS updated_at_1, employees.created_by AS created_by_1 
+FROM zone_managers JOIN employees ON zone_managers.employee_id = employees.id 
+WHERE zone_managers.zone_id = $1::UUID
+2026-03-25 07:52:15,150 INFO sqlalchemy.engine.Engine [cached since 0.03245s ago] (UUID('ecd6f6d4-4648-4742-b2e6-f20dbb61d5f4'),)
+2026-03-25 07:52:15,153 INFO sqlalchemy.engine.Engine COMMIT
+INFO:     127.0.0.1:56798 - "GET /api/zones?status_filter=active HTTP/1.1" 200 OK
+2026-03-25 07:52:15,183 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-03-25 07:52:15,186 INFO sqlalchemy.engine.Engine SELECT count(*) AS count_1 
+FROM (SELECT sites.site_id AS site_id, sites.client_id AS client_id, sites.region_id AS region_id, sites.site_name AS site_name, sites.region AS region, sites.district AS district, sites.ward AS ward, sites.address AS address, sites.contact_person AS contact_person, sites.contact_phone AS contact_phone, sites.status AS status, sites.notes AS notes, sites.id AS id, sites.org_id AS org_id, sites.created_at AS created_at, sites.updated_at AS updated_at, sites.created_by AS created_by 
+FROM sites 
+WHERE sites.org_id = $1::UUID) AS anon_1
+2026-03-25 07:52:15,187 INFO sqlalchemy.engine.Engine [generated in 0.00091s] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'),)
+2026-03-25 07:52:15,191 INFO sqlalchemy.engine.Engine SELECT sites.site_id, sites.client_id, sites.region_id, sites.site_name, sites.region, sites.district, sites.ward, sites.address, sites.contact_person, sites.contact_phone, sites.status, sites.notes, sites.id, sites.org_id, sites.created_at, sites.updated_at, sites.created_by 
+FROM sites 
+WHERE sites.org_id = $1::UUID ORDER BY sites.created_at DESC 
+ LIMIT $2::INTEGER OFFSET $3::INTEGER
+2026-03-25 07:52:15,192 INFO sqlalchemy.engine.Engine [generated in 0.00098s] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), 50, 0)
+2026-03-25 07:52:15,201 INFO sqlalchemy.engine.Engine COMMIT
+INFO:     127.0.0.1:56798 - "GET /api/sites HTTP/1.1" 200 OK
+2026-03-25 07:52:32,822 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-03-25 07:52:32,823 INFO sqlalchemy.engine.Engine SELECT users.email, users.password_hash, users.first_name, users.last_name, users.role, users.is_active, users.last_login, users.employee_id, users.id, users.org_id, users.created_at, users.updated_at, users.created_by 
+FROM users 
+WHERE users.email = $1::VARCHAR
+2026-03-25 07:52:32,824 INFO sqlalchemy.engine.Engine [cached since 18.27s ago] ('admin@securityops.com',)
+2026-03-25 07:52:33,189 INFO sqlalchemy.engine.Engine SELECT organizations.name, organizations.slug, organizations.logo_url, organizations.accent_color, organizations.address, organizations.phone, organizations.email, organizations.website, organizations.is_active, organizations.bank_details, organizations.id, organizations.org_id, organizations.created_at, organizations.updated_at, organizations.created_by 
+FROM organizations 
+WHERE organizations.id = $1::UUID
+2026-03-25 07:52:33,190 INFO sqlalchemy.engine.Engine [cached since 18.23s ago] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'),)
+2026-03-25 07:52:33,193 INFO sqlalchemy.engine.Engine UPDATE users SET last_login=$1::TIMESTAMP WITH TIME ZONE, updated_at=now() WHERE users.id = $2::UUID
+2026-03-25 07:52:33,194 INFO sqlalchemy.engine.Engine [cached since 18.22s ago] (datetime.datetime(2026, 3, 25, 4, 52, 33, 193090, tzinfo=datetime.timezone.utc), UUID('c623a1bd-4ac1-4e52-8461-8a8b38e07327'))
+2026-03-25 07:52:33,196 INFO sqlalchemy.engine.Engine INSERT INTO refresh_tokens (user_id, token, expires_at, is_revoked, id, org_id, created_by) VALUES ($1::UUID, $2::VARCHAR, $3::TIMESTAMP WITH TIME ZONE, $4::BOOLEAN, $5::UUID, $6::UUID, $7::UUID) RETURNING refresh_tokens.created_at, refresh_tokens.updated_at
+2026-03-25 07:52:33,197 INFO sqlalchemy.engine.Engine [cached since 18.21s ago] (UUID('c623a1bd-4ac1-4e52-8461-8a8b38e07327'), 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjNjIzYTFiZC00YWMxLTRlNTItODQ2MS04YThiMzhlMDczMjciLCJlbWFpbCI6ImFkbWluQHNlY3VyaXR5b3BzLmNvbSIsIm9yZ19p ... (17 characters truncated) ... TY2ZmItNDQ2Ny04ZmQ2LTQxZDgzZjE1ZTIzNyIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3NTAxOTE1MywidHlwZSI6InJlZnJlc2gifQ.TGcxWxxcRI9AbvOH_0qbpEOdZtANtK0I4tWqwrNWeKA', datetime.datetime(2026, 4, 1, 4, 52, 33, 192977, tzinfo=datetime.timezone.utc), False, UUID('0c018767-ba8a-4e5e-aae9-e9741039fea5'), UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), None)
+2026-03-25 07:52:33,199 INFO sqlalchemy.engine.Engine COMMIT
+2026-03-25 07:52:33,202 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-03-25 07:52:33,204 INFO sqlalchemy.engine.Engine SELECT users.email, users.password_hash, users.first_name, users.last_name, users.role, users.is_active, users.last_login, users.employee_id, users.id, users.org_id, users.created_at, users.updated_at, users.created_by 
+FROM users 
+WHERE users.id = $1::UUID
+2026-03-25 07:52:33,204 INFO sqlalchemy.engine.Engine [cached since 18.21s ago] (UUID('c623a1bd-4ac1-4e52-8461-8a8b38e07327'),)
+2026-03-25 07:52:33,207 INFO sqlalchemy.engine.Engine COMMIT
+INFO:     127.0.0.1:64079 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64079 - "GET /api/regions?status_filter=active HTTP/1.1" 200 OK
+2026-03-25 07:52:33,283 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-03-25 07:52:33,284 INFO sqlalchemy.engine.Engine SELECT zones.zone_name, zones.notes, zones.status, zones.id, zones.org_id, zones.created_at, zones.updated_at, zones.created_by 
+FROM zones 
+WHERE zones.org_id = $1::UUID AND zones.status = $2 ORDER BY zones.zone_name
+2026-03-25 07:52:33,285 INFO sqlalchemy.engine.Engine [cached since 18.19s ago] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), 'ACTIVE')
+2026-03-25 07:52:33,287 INFO sqlalchemy.engine.Engine SELECT regions.id 
+FROM regions 
+WHERE regions.zone_id = $1::UUID AND regions.org_id = $2::UUID
+2026-03-25 07:52:33,288 INFO sqlalchemy.engine.Engine [cached since 18.19s ago] (UUID('c58a8035-0f39-4536-8f38-a9b508947d43'), UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'))
+2026-03-25 07:52:33,291 INFO sqlalchemy.engine.Engine SELECT count(*) AS count_1 
+FROM employees 
+WHERE employees.region_id IN ($2::UUID, $3::UUID, $4::UUID) AND employees.org_id = $1::UUID
+2026-03-25 07:52:33,292 INFO sqlalchemy.engine.Engine [cached since 18.18s ago] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), UUID('151237e6-fd60-4d4b-a83f-8b710bfb4671'), UUID('9b082de0-c7ff-4d79-b178-e00ee101a883'), UUID('a0af97eb-e992-4de5-877b-0416e05a4729'))
+2026-03-25 07:52:33,295 INFO sqlalchemy.engine.Engine SELECT count(*) AS count_1 
+FROM sites 
+WHERE sites.region_id IN ($2::UUID, $3::UUID, $4::UUID) AND sites.org_id = $1::UUID
+2026-03-25 07:52:33,296 INFO sqlalchemy.engine.Engine [cached since 18.18s ago] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), UUID('151237e6-fd60-4d4b-a83f-8b710bfb4671'), UUID('9b082de0-c7ff-4d79-b178-e00ee101a883'), UUID('a0af97eb-e992-4de5-877b-0416e05a4729'))
+2026-03-25 07:52:33,298 INFO sqlalchemy.engine.Engine SELECT zone_managers.zone_id, zone_managers.employee_id, zone_managers.assigned_date, zone_managers.end_date, zone_managers.active, zone_managers.id, zone_managers.org_id, zone_managers.created_at, zone_managers.updated_at, zone_managers.created_by, employees.employee_id AS employee_id_1, employees.guard_no, employees.profile_photo, employees.first_name, employees.middle_name, employees.last_name, employees.gender, employees.date_of_birth, employees.marital_status, employees.nationality, employees.nin, employees.phone_1, employees.phone_2, employees.email, employees.physical_address, employees.region, employees.region_id, employees.postal_address, employees.education_background, employees.job_title, employees.employment_status, employees.hire_date, employees.termination_date, employees.notes, employees.id AS id_1, employees.org_id AS org_id_1, employees.created_at AS created_at_1, employees.updated_at AS updated_at_1, employees.created_by AS created_by_1 
+FROM zone_managers JOIN employees ON zone_managers.employee_id = employees.id 
+WHERE zone_managers.zone_id = $1::UUID
+2026-03-25 07:52:33,299 INFO sqlalchemy.engine.Engine [cached since 18.18s ago] (UUID('c58a8035-0f39-4536-8f38-a9b508947d43'),)
+2026-03-25 07:52:33,302 INFO sqlalchemy.engine.Engine SELECT regions.id 
+FROM regions 
+WHERE regions.zone_id = $1::UUID AND regions.org_id = $2::UUID
+2026-03-25 07:52:33,302 INFO sqlalchemy.engine.Engine [cached since 18.2s ago] (UUID('fbfb6e47-acf9-497a-8d36-25b987779626'), UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'))
+2026-03-25 07:52:33,305 INFO sqlalchemy.engine.Engine SELECT count(*) AS count_1 
+FROM employees 
+WHERE employees.region_id IN ($2::UUID, $3::UUID, $4::UUID, $5::UUID) AND employees.org_id = $1::UUID
+2026-03-25 07:52:33,306 INFO sqlalchemy.engine.Engine [cached since 18.2s ago] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), UUID('6a586f53-4c45-4033-9089-f6aba7fe9132'), UUID('79e63375-d520-422e-8c1b-98ad4c190faa'), UUID('bb3335cc-1376-4845-a815-e997dd6b262b'), UUID('036c0ed0-98c3-4eae-b9b7-cf5e3679093e'))
+2026-03-25 07:52:33,308 INFO sqlalchemy.engine.Engine SELECT count(*) AS count_1 
+FROM sites 
+WHERE sites.region_id IN ($2::UUID, $3::UUID, $4::UUID, $5::UUID) AND sites.org_id = $1::UUID
+2026-03-25 07:52:33,309 INFO sqlalchemy.engine.Engine [cached since 18.2s ago] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), UUID('6a586f53-4c45-4033-9089-f6aba7fe9132'), UUID('79e63375-d520-422e-8c1b-98ad4c190faa'), UUID('bb3335cc-1376-4845-a815-e997dd6b262b'), UUID('036c0ed0-98c3-4eae-b9b7-cf5e3679093e'))
+2026-03-25 07:52:33,311 INFO sqlalchemy.engine.Engine SELECT zone_managers.zone_id, zone_managers.employee_id, zone_managers.assigned_date, zone_managers.end_date, zone_managers.active, zone_managers.id, zone_managers.org_id, zone_managers.created_at, zone_managers.updated_at, zone_managers.created_by, employees.employee_id AS employee_id_1, employees.guard_no, employees.profile_photo, employees.first_name, employees.middle_name, employees.last_name, employees.gender, employees.date_of_birth, employees.marital_status, employees.nationality, employees.nin, employees.phone_1, employees.phone_2, employees.email, employees.physical_address, employees.region, employees.region_id, employees.postal_address, employees.education_background, employees.job_title, employees.employment_status, employees.hire_date, employees.termination_date, employees.notes, employees.id AS id_1, employees.org_id AS org_id_1, employees.created_at AS created_at_1, employees.updated_at AS updated_at_1, employees.created_by AS created_by_1 
+FROM zone_managers JOIN employees ON zone_managers.employee_id = employees.id 
+WHERE zone_managers.zone_id = $1::UUID
+2026-03-25 07:52:33,312 INFO sqlalchemy.engine.Engine [cached since 18.19s ago] (UUID('fbfb6e47-acf9-497a-8d36-25b987779626'),)
+2026-03-25 07:52:33,314 INFO sqlalchemy.engine.Engine SELECT regions.id 
+FROM regions 
+WHERE regions.zone_id = $1::UUID AND regions.org_id = $2::UUID
+2026-03-25 07:52:33,314 INFO sqlalchemy.engine.Engine [cached since 18.21s ago] (UUID('ecd6f6d4-4648-4742-b2e6-f20dbb61d5f4'), UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'))
+2026-03-25 07:52:33,317 INFO sqlalchemy.engine.Engine SELECT count(*) AS count_1 
+FROM employees 
+WHERE employees.region_id IN ($2::UUID, $3::UUID) AND employees.org_id = $1::UUID
+2026-03-25 07:52:33,318 INFO sqlalchemy.engine.Engine [cached since 18.21s ago] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), UUID('8a8bd5cc-88e5-4e49-b507-32fc3b1542c5'), UUID('38a2054a-3433-45b6-bf5a-48ffdd9b41f5'))
+2026-03-25 07:52:33,320 INFO sqlalchemy.engine.Engine SELECT count(*) AS count_1 
+FROM sites 
+WHERE sites.region_id IN ($2::UUID, $3::UUID) AND sites.org_id = $1::UUID
+2026-03-25 07:52:33,321 INFO sqlalchemy.engine.Engine [cached since 18.21s ago] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), UUID('8a8bd5cc-88e5-4e49-b507-32fc3b1542c5'), UUID('38a2054a-3433-45b6-bf5a-48ffdd9b41f5'))
+2026-03-25 07:52:33,324 INFO sqlalchemy.engine.Engine SELECT zone_managers.zone_id, zone_managers.employee_id, zone_managers.assigned_date, zone_managers.end_date, zone_managers.active, zone_managers.id, zone_managers.org_id, zone_managers.created_at, zone_managers.updated_at, zone_managers.created_by, employees.employee_id AS employee_id_1, employees.guard_no, employees.profile_photo, employees.first_name, employees.middle_name, employees.last_name, employees.gender, employees.date_of_birth, employees.marital_status, employees.nationality, employees.nin, employees.phone_1, employees.phone_2, employees.email, employees.physical_address, employees.region, employees.region_id, employees.postal_address, employees.education_background, employees.job_title, employees.employment_status, employees.hire_date, employees.termination_date, employees.notes, employees.id AS id_1, employees.org_id AS org_id_1, employees.created_at AS created_at_1, employees.updated_at AS updated_at_1, employees.created_by AS created_by_1 
+FROM zone_managers JOIN employees ON zone_managers.employee_id = employees.id 
+WHERE zone_managers.zone_id = $1::UUID
+2026-03-25 07:52:33,325 INFO sqlalchemy.engine.Engine [cached since 18.21s ago] (UUID('ecd6f6d4-4648-4742-b2e6-f20dbb61d5f4'),)
+2026-03-25 07:52:33,328 INFO sqlalchemy.engine.Engine COMMIT
+INFO:     127.0.0.1:64079 - "GET /api/zones?status_filter=active HTTP/1.1" 200 OK
+2026-03-25 07:53:27,283 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-03-25 07:53:27,284 INFO sqlalchemy.engine.Engine SELECT users.email, users.password_hash, users.first_name, users.last_name, users.role, users.is_active, users.last_login, users.employee_id, users.id, users.org_id, users.created_at, users.updated_at, users.created_by 
+FROM users 
+WHERE users.email = $1::VARCHAR
+2026-03-25 07:53:27,285 INFO sqlalchemy.engine.Engine [cached since 72.73s ago] ('admin@securityops.com',)
+2026-03-25 07:53:27,655 INFO sqlalchemy.engine.Engine SELECT organizations.name, organizations.slug, organizations.logo_url, organizations.accent_color, organizations.address, organizations.phone, organizations.email, organizations.website, organizations.is_active, organizations.bank_details, organizations.id, organizations.org_id, organizations.created_at, organizations.updated_at, organizations.created_by 
+FROM organizations 
+WHERE organizations.id = $1::UUID
+2026-03-25 07:53:27,657 INFO sqlalchemy.engine.Engine [cached since 72.69s ago] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'),)
+2026-03-25 07:53:27,660 INFO sqlalchemy.engine.Engine UPDATE users SET last_login=$1::TIMESTAMP WITH TIME ZONE, updated_at=now() WHERE users.id = $2::UUID
+2026-03-25 07:53:27,661 INFO sqlalchemy.engine.Engine [cached since 72.68s ago] (datetime.datetime(2026, 3, 25, 4, 53, 27, 660010, tzinfo=datetime.timezone.utc), UUID('c623a1bd-4ac1-4e52-8461-8a8b38e07327'))
+2026-03-25 07:53:27,663 INFO sqlalchemy.engine.Engine INSERT INTO refresh_tokens (user_id, token, expires_at, is_revoked, id, org_id, created_by) VALUES ($1::UUID, $2::VARCHAR, $3::TIMESTAMP WITH TIME ZONE, $4::BOOLEAN, $5::UUID, $6::UUID, $7::UUID) RETURNING refresh_tokens.created_at, refresh_tokens.updated_at
+2026-03-25 07:53:27,664 INFO sqlalchemy.engine.Engine [cached since 72.68s ago] (UUID('c623a1bd-4ac1-4e52-8461-8a8b38e07327'), 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjNjIzYTFiZC00YWMxLTRlNTItODQ2MS04YThiMzhlMDczMjciLCJlbWFpbCI6ImFkbWluQHNlY3VyaXR5b3BzLmNvbSIsIm9yZ19p ... (17 characters truncated) ... TY2ZmItNDQ2Ny04ZmQ2LTQxZDgzZjE1ZTIzNyIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3NTAxOTIwNywidHlwZSI6InJlZnJlc2gifQ.cjH2z-a7tXzyNbfvUtKtEv9FZDWQdSM3t3JOnLzFEPo', datetime.datetime(2026, 4, 1, 4, 53, 27, 659852, tzinfo=datetime.timezone.utc), False, UUID('ad158ea2-d8c0-462b-b580-4862b1634053'), UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), None)
+2026-03-25 07:53:27,667 INFO sqlalchemy.engine.Engine COMMIT
+2026-03-25 07:53:27,670 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-03-25 07:53:27,671 INFO sqlalchemy.engine.Engine SELECT users.email, users.password_hash, users.first_name, users.last_name, users.role, users.is_active, users.last_login, users.employee_id, users.id, users.org_id, users.created_at, users.updated_at, users.created_by 
+FROM users 
+WHERE users.id = $1::UUID
+2026-03-25 07:53:27,672 INFO sqlalchemy.engine.Engine [cached since 72.68s ago] (UUID('c623a1bd-4ac1-4e52-8461-8a8b38e07327'),)
+2026-03-25 07:53:27,675 INFO sqlalchemy.engine.Engine COMMIT
+INFO:     127.0.0.1:54011 - "POST /api/auth/login HTTP/1.1" 200 OK
+2026-03-25 07:53:27,699 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-03-25 07:53:27,700 INFO sqlalchemy.engine.Engine SELECT count(*) AS count_1 
+FROM (SELECT employees.employee_id AS employee_id, employees.guard_no AS guard_no, employees.profile_photo AS profile_photo, employees.first_name AS first_name, employees.middle_name AS middle_name, employees.last_name AS last_name, employees.gender AS gender, employees.date_of_birth AS date_of_birth, employees.marital_status AS marital_status, employees.nationality AS nationality, employees.nin AS nin, employees.phone_1 AS phone_1, employees.phone_2 AS phone_2, employees.email AS email, employees.physical_address AS physical_address, employees.region AS region, employees.region_id AS region_id, employees.postal_address AS postal_address, employees.education_background AS education_background, employees.job_title AS job_title, employees.employment_status AS employment_status, employees.hire_date AS hire_date, employees.termination_date AS termination_date, employees.notes AS notes, employees.id AS id, employees.org_id AS org_id, employees.created_at AS created_at, employees.updated_at AS updated_at, employees.created_by AS created_by 
+FROM employees 
+WHERE employees.org_id = $1::UUID) AS anon_1
+2026-03-25 07:53:27,701 INFO sqlalchemy.engine.Engine [cached since 72.64s ago] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'),)
+2026-03-25 07:53:27,704 INFO sqlalchemy.engine.Engine SELECT employees.employee_id, employees.guard_no, employees.profile_photo, employees.first_name, employees.middle_name, employees.last_name, employees.gender, employees.date_of_birth, employees.marital_status, employees.nationality, employees.nin, employees.phone_1, employees.phone_2, employees.email, employees.physical_address, employees.region, employees.region_id, employees.postal_address, employees.education_background, employees.job_title, employees.employment_status, employees.hire_date, employees.termination_date, employees.notes, employees.id, employees.org_id, employees.created_at, employees.updated_at, employees.created_by 
+FROM employees 
+WHERE employees.org_id = $1::UUID ORDER BY employees.created_at DESC 
+ LIMIT $2::INTEGER OFFSET $3::INTEGER
+2026-03-25 07:53:27,706 INFO sqlalchemy.engine.Engine [generated in 0.00138s] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), 50, 0)
+2026-03-25 07:53:27,708 INFO sqlalchemy.engine.Engine COMMIT
+INFO:     127.0.0.1:54011 - "GET /api/employees HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54011 - "GET /api/regions?status_filter=active HTTP/1.1" 200 OK
+2026-03-25 07:53:27,726 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-03-25 07:53:27,728 INFO sqlalchemy.engine.Engine SELECT zones.zone_name, zones.notes, zones.status, zones.id, zones.org_id, zones.created_at, zones.updated_at, zones.created_by 
+FROM zones 
+WHERE zones.org_id = $1::UUID AND zones.status = $2 ORDER BY zones.zone_name
+2026-03-25 07:53:27,728 INFO sqlalchemy.engine.Engine [cached since 72.63s ago] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), 'ACTIVE')
+2026-03-25 07:53:27,732 INFO sqlalchemy.engine.Engine SELECT regions.id 
+FROM regions 
+WHERE regions.zone_id = $1::UUID AND regions.org_id = $2::UUID
+2026-03-25 07:53:27,733 INFO sqlalchemy.engine.Engine [cached since 72.63s ago] (UUID('c58a8035-0f39-4536-8f38-a9b508947d43'), UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'))
+2026-03-25 07:53:27,735 INFO sqlalchemy.engine.Engine SELECT count(*) AS count_1 
+FROM employees 
+WHERE employees.region_id IN ($2::UUID, $3::UUID, $4::UUID) AND employees.org_id = $1::UUID
+2026-03-25 07:53:27,736 INFO sqlalchemy.engine.Engine [cached since 72.63s ago] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), UUID('151237e6-fd60-4d4b-a83f-8b710bfb4671'), UUID('9b082de0-c7ff-4d79-b178-e00ee101a883'), UUID('a0af97eb-e992-4de5-877b-0416e05a4729'))
+2026-03-25 07:53:27,738 INFO sqlalchemy.engine.Engine SELECT count(*) AS count_1 
+FROM sites 
+WHERE sites.region_id IN ($2::UUID, $3::UUID, $4::UUID) AND sites.org_id = $1::UUID
+2026-03-25 07:53:27,739 INFO sqlalchemy.engine.Engine [cached since 72.63s ago] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), UUID('151237e6-fd60-4d4b-a83f-8b710bfb4671'), UUID('9b082de0-c7ff-4d79-b178-e00ee101a883'), UUID('a0af97eb-e992-4de5-877b-0416e05a4729'))
+2026-03-25 07:53:27,741 INFO sqlalchemy.engine.Engine SELECT zone_managers.zone_id, zone_managers.employee_id, zone_managers.assigned_date, zone_managers.end_date, zone_managers.active, zone_managers.id, zone_managers.org_id, zone_managers.created_at, zone_managers.updated_at, zone_managers.created_by, employees.employee_id AS employee_id_1, employees.guard_no, employees.profile_photo, employees.first_name, employees.middle_name, employees.last_name, employees.gender, employees.date_of_birth, employees.marital_status, employees.nationality, employees.nin, employees.phone_1, employees.phone_2, employees.email, employees.physical_address, employees.region, employees.region_id, employees.postal_address, employees.education_background, employees.job_title, employees.employment_status, employees.hire_date, employees.termination_date, employees.notes, employees.id AS id_1, employees.org_id AS org_id_1, employees.created_at AS created_at_1, employees.updated_at AS updated_at_1, employees.created_by AS created_by_1 
+FROM zone_managers JOIN employees ON zone_managers.employee_id = employees.id 
+WHERE zone_managers.zone_id = $1::UUID
+2026-03-25 07:53:27,742 INFO sqlalchemy.engine.Engine [cached since 72.62s ago] (UUID('c58a8035-0f39-4536-8f38-a9b508947d43'),)
+2026-03-25 07:53:27,745 INFO sqlalchemy.engine.Engine SELECT regions.id 
+FROM regions 
+WHERE regions.zone_id = $1::UUID AND regions.org_id = $2::UUID
+2026-03-25 07:53:27,746 INFO sqlalchemy.engine.Engine [cached since 72.64s ago] (UUID('fbfb6e47-acf9-497a-8d36-25b987779626'), UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'))
+2026-03-25 07:53:27,749 INFO sqlalchemy.engine.Engine SELECT count(*) AS count_1 
+FROM employees 
+WHERE employees.region_id IN ($2::UUID, $3::UUID, $4::UUID, $5::UUID) AND employees.org_id = $1::UUID
+2026-03-25 07:53:27,750 INFO sqlalchemy.engine.Engine [cached since 72.64s ago] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), UUID('6a586f53-4c45-4033-9089-f6aba7fe9132'), UUID('79e63375-d520-422e-8c1b-98ad4c190faa'), UUID('bb3335cc-1376-4845-a815-e997dd6b262b'), UUID('036c0ed0-98c3-4eae-b9b7-cf5e3679093e'))
+2026-03-25 07:53:27,753 INFO sqlalchemy.engine.Engine SELECT count(*) AS count_1 
+FROM sites 
+WHERE sites.region_id IN ($2::UUID, $3::UUID, $4::UUID, $5::UUID) AND sites.org_id = $1::UUID
+2026-03-25 07:53:27,754 INFO sqlalchemy.engine.Engine [cached since 72.64s ago] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), UUID('6a586f53-4c45-4033-9089-f6aba7fe9132'), UUID('79e63375-d520-422e-8c1b-98ad4c190faa'), UUID('bb3335cc-1376-4845-a815-e997dd6b262b'), UUID('036c0ed0-98c3-4eae-b9b7-cf5e3679093e'))
+2026-03-25 07:53:27,757 INFO sqlalchemy.engine.Engine SELECT zone_managers.zone_id, zone_managers.employee_id, zone_managers.assigned_date, zone_managers.end_date, zone_managers.active, zone_managers.id, zone_managers.org_id, zone_managers.created_at, zone_managers.updated_at, zone_managers.created_by, employees.employee_id AS employee_id_1, employees.guard_no, employees.profile_photo, employees.first_name, employees.middle_name, employees.last_name, employees.gender, employees.date_of_birth, employees.marital_status, employees.nationality, employees.nin, employees.phone_1, employees.phone_2, employees.email, employees.physical_address, employees.region, employees.region_id, employees.postal_address, employees.education_background, employees.job_title, employees.employment_status, employees.hire_date, employees.termination_date, employees.notes, employees.id AS id_1, employees.org_id AS org_id_1, employees.created_at AS created_at_1, employees.updated_at AS updated_at_1, employees.created_by AS created_by_1 
+FROM zone_managers JOIN employees ON zone_managers.employee_id = employees.id 
+WHERE zone_managers.zone_id = $1::UUID
+2026-03-25 07:53:27,758 INFO sqlalchemy.engine.Engine [cached since 72.64s ago] (UUID('fbfb6e47-acf9-497a-8d36-25b987779626'),)
+2026-03-25 07:53:27,760 INFO sqlalchemy.engine.Engine SELECT regions.id 
+FROM regions 
+WHERE regions.zone_id = $1::UUID AND regions.org_id = $2::UUID
+2026-03-25 07:53:27,761 INFO sqlalchemy.engine.Engine [cached since 72.66s ago] (UUID('ecd6f6d4-4648-4742-b2e6-f20dbb61d5f4'), UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'))
+2026-03-25 07:53:27,764 INFO sqlalchemy.engine.Engine SELECT count(*) AS count_1 
+FROM employees 
+WHERE employees.region_id IN ($2::UUID, $3::UUID) AND employees.org_id = $1::UUID
+2026-03-25 07:53:27,764 INFO sqlalchemy.engine.Engine [cached since 72.66s ago] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), UUID('8a8bd5cc-88e5-4e49-b507-32fc3b1542c5'), UUID('38a2054a-3433-45b6-bf5a-48ffdd9b41f5'))
+2026-03-25 07:53:27,767 INFO sqlalchemy.engine.Engine SELECT count(*) AS count_1 
+FROM sites 
+WHERE sites.region_id IN ($2::UUID, $3::UUID) AND sites.org_id = $1::UUID
+2026-03-25 07:53:27,767 INFO sqlalchemy.engine.Engine [cached since 72.66s ago] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), UUID('8a8bd5cc-88e5-4e49-b507-32fc3b1542c5'), UUID('38a2054a-3433-45b6-bf5a-48ffdd9b41f5'))
+2026-03-25 07:53:27,770 INFO sqlalchemy.engine.Engine SELECT zone_managers.zone_id, zone_managers.employee_id, zone_managers.assigned_date, zone_managers.end_date, zone_managers.active, zone_managers.id, zone_managers.org_id, zone_managers.created_at, zone_managers.updated_at, zone_managers.created_by, employees.employee_id AS employee_id_1, employees.guard_no, employees.profile_photo, employees.first_name, employees.middle_name, employees.last_name, employees.gender, employees.date_of_birth, employees.marital_status, employees.nationality, employees.nin, employees.phone_1, employees.phone_2, employees.email, employees.physical_address, employees.region, employees.region_id, employees.postal_address, employees.education_background, employees.job_title, employees.employment_status, employees.hire_date, employees.termination_date, employees.notes, employees.id AS id_1, employees.org_id AS org_id_1, employees.created_at AS created_at_1, employees.updated_at AS updated_at_1, employees.created_by AS created_by_1 
+FROM zone_managers JOIN employees ON zone_managers.employee_id = employees.id 
+WHERE zone_managers.zone_id = $1::UUID
+2026-03-25 07:53:27,771 INFO sqlalchemy.engine.Engine [cached since 72.65s ago] (UUID('ecd6f6d4-4648-4742-b2e6-f20dbb61d5f4'),)
+2026-03-25 07:53:27,774 INFO sqlalchemy.engine.Engine COMMIT
+INFO:     127.0.0.1:54011 - "GET /api/zones?status_filter=active HTTP/1.1" 200 OK
+2026-03-25 07:53:27,783 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-03-25 07:53:27,784 INFO sqlalchemy.engine.Engine SELECT count(*) AS count_1 
+FROM (SELECT sites.site_id AS site_id, sites.client_id AS client_id, sites.region_id AS region_id, sites.site_name AS site_name, sites.region AS region, sites.district AS district, sites.ward AS ward, sites.address AS address, sites.contact_person AS contact_person, sites.contact_phone AS contact_phone, sites.status AS status, sites.notes AS notes, sites.id AS id, sites.org_id AS org_id, sites.created_at AS created_at, sites.updated_at AS updated_at, sites.created_by AS created_by 
+FROM sites 
+WHERE sites.org_id = $1::UUID) AS anon_1
+2026-03-25 07:53:27,785 INFO sqlalchemy.engine.Engine [cached since 72.6s ago] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'),)
+2026-03-25 07:53:27,789 INFO sqlalchemy.engine.Engine SELECT sites.site_id, sites.client_id, sites.region_id, sites.site_name, sites.region, sites.district, sites.ward, sites.address, sites.contact_person, sites.contact_phone, sites.status, sites.notes, sites.id, sites.org_id, sites.created_at, sites.updated_at, sites.created_by 
+FROM sites 
+WHERE sites.org_id = $1::UUID ORDER BY sites.created_at DESC 
+ LIMIT $2::INTEGER OFFSET $3::INTEGER
+2026-03-25 07:53:27,790 INFO sqlalchemy.engine.Engine [generated in 0.00098s] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), 50, 0)
+2026-03-25 07:53:27,792 INFO sqlalchemy.engine.Engine COMMIT
+INFO:     127.0.0.1:54011 - "GET /api/sites HTTP/1.1" 200 OK
+2026-03-25 07:53:46,720 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-03-25 07:53:46,721 INFO sqlalchemy.engine.Engine SELECT users.email, users.password_hash, users.first_name, users.last_name, users.role, users.is_active, users.last_login, users.employee_id, users.id, users.org_id, users.created_at, users.updated_at, users.created_by 
+FROM users 
+WHERE users.email = $1::VARCHAR
+2026-03-25 07:53:46,722 INFO sqlalchemy.engine.Engine [cached since 92.17s ago] ('admin@securityops.com',)
+2026-03-25 07:53:47,085 INFO sqlalchemy.engine.Engine SELECT organizations.name, organizations.slug, organizations.logo_url, organizations.accent_color, organizations.address, organizations.phone, organizations.email, organizations.website, organizations.is_active, organizations.bank_details, organizations.id, organizations.org_id, organizations.created_at, organizations.updated_at, organizations.created_by 
+FROM organizations 
+WHERE organizations.id = $1::UUID
+2026-03-25 07:53:47,087 INFO sqlalchemy.engine.Engine [cached since 92.12s ago] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'),)
+2026-03-25 07:53:47,090 INFO sqlalchemy.engine.Engine UPDATE users SET last_login=$1::TIMESTAMP WITH TIME ZONE, updated_at=now() WHERE users.id = $2::UUID
+2026-03-25 07:53:47,090 INFO sqlalchemy.engine.Engine [cached since 92.11s ago] (datetime.datetime(2026, 3, 25, 4, 53, 47, 89507, tzinfo=datetime.timezone.utc), UUID('c623a1bd-4ac1-4e52-8461-8a8b38e07327'))
+2026-03-25 07:53:47,093 INFO sqlalchemy.engine.Engine INSERT INTO refresh_tokens (user_id, token, expires_at, is_revoked, id, org_id, created_by) VALUES ($1::UUID, $2::VARCHAR, $3::TIMESTAMP WITH TIME ZONE, $4::BOOLEAN, $5::UUID, $6::UUID, $7::UUID) RETURNING refresh_tokens.created_at, refresh_tokens.updated_at
+2026-03-25 07:53:47,094 INFO sqlalchemy.engine.Engine [cached since 92.11s ago] (UUID('c623a1bd-4ac1-4e52-8461-8a8b38e07327'), 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjNjIzYTFiZC00YWMxLTRlNTItODQ2MS04YThiMzhlMDczMjciLCJlbWFpbCI6ImFkbWluQHNlY3VyaXR5b3BzLmNvbSIsIm9yZ19p ... (17 characters truncated) ... TY2ZmItNDQ2Ny04ZmQ2LTQxZDgzZjE1ZTIzNyIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3NTAxOTIyNywidHlwZSI6InJlZnJlc2gifQ.PyWGcZe_4RYopZLPOOHK9k6byEydEOM9BzeKpQNeqWc', datetime.datetime(2026, 4, 1, 4, 53, 47, 89404, tzinfo=datetime.timezone.utc), False, UUID('05f7a8ab-df0d-41a8-a093-449a97f9aa5a'), UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), None)
+2026-03-25 07:53:47,096 INFO sqlalchemy.engine.Engine COMMIT
+2026-03-25 07:53:47,099 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-03-25 07:53:47,100 INFO sqlalchemy.engine.Engine SELECT users.email, users.password_hash, users.first_name, users.last_name, users.role, users.is_active, users.last_login, users.employee_id, users.id, users.org_id, users.created_at, users.updated_at, users.created_by 
+FROM users 
+WHERE users.id = $1::UUID
+2026-03-25 07:53:47,101 INFO sqlalchemy.engine.Engine [cached since 92.1s ago] (UUID('c623a1bd-4ac1-4e52-8461-8a8b38e07327'),)
+2026-03-25 07:53:47,103 INFO sqlalchemy.engine.Engine COMMIT
+INFO:     127.0.0.1:50281 - "POST /api/auth/login HTTP/1.1" 200 OK
+2026-03-25 08:02:23,560 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-03-25 08:02:23,563 INFO sqlalchemy.engine.Engine SELECT employees.employee_id 
+FROM employees 
+WHERE employees.org_id = $1::UUID AND employees.employee_id LIKE $2::VARCHAR ORDER BY employees.employee_id DESC 
+ LIMIT $3::INTEGER
+2026-03-25 08:02:23,564 INFO sqlalchemy.engine.Engine [generated in 0.00129s] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), 'EMP%', 1)
+2026-03-25 08:02:23,569 INFO sqlalchemy.engine.Engine SELECT employees.guard_no 
+FROM employees 
+WHERE employees.org_id = $1::UUID AND employees.guard_no LIKE $2::VARCHAR ORDER BY employees.guard_no DESC 
+ LIMIT $3::INTEGER
+2026-03-25 08:02:23,570 INFO sqlalchemy.engine.Engine [generated in 0.00118s] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), 'G%', 1)
+2026-03-25 08:02:23,573 INFO sqlalchemy.engine.Engine ROLLBACK
+INFO:     127.0.0.1:62706 - "POST /api/employees HTTP/1.1" 500 Internal Server Error
+2026-03-25 08:03:14,673 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-03-25 08:03:14,675 INFO sqlalchemy.engine.Engine SELECT employees.employee_id 
+FROM employees 
+WHERE employees.org_id = $1::UUID AND employees.employee_id LIKE $2::VARCHAR ORDER BY employees.employee_id DESC 
+ LIMIT $3::INTEGER
+2026-03-25 08:03:14,676 INFO sqlalchemy.engine.Engine [cached since 51.11s ago] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), 'EMP%', 1)
+2026-03-25 08:03:14,681 INFO sqlalchemy.engine.Engine SELECT employees.guard_no 
+FROM employees 
+WHERE employees.org_id = $1::UUID AND employees.guard_no LIKE $2::VARCHAR ORDER BY employees.guard_no DESC 
+ LIMIT $3::INTEGER
+2026-03-25 08:03:14,683 INFO sqlalchemy.engine.Engine [cached since 51.11s ago] (UUID('325d99b7-66fb-4467-8fd6-41d83f15e237'), 'G%', 1)
+2026-03-25 08:03:14,685 INFO sqlalchemy.engine.Engine ROLLBACK
+INFO:     127.0.0.1:49685 - "POST /api/employees HTTP/1.1" 500 Internal Server Error

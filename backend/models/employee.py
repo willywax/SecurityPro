@@ -10,7 +10,9 @@ from models.enums import (
     IDType,
     ContractType,
     ContractStatus,
+    Relationship,
 )
+import uuid
 
 
 class Employee(BaseModel):
@@ -36,7 +38,10 @@ class Employee(BaseModel):
     phone_1 = Column(String, nullable=True)
     phone_2 = Column(String, nullable=True)
     email = Column(String, nullable=True)
-    physical_address = Column(String, nullable=True)
+    physical_address = Column(String, nullable=False)
+    region = Column(String, nullable=True)
+    region_id = Column(UUID(as_uuid=True), ForeignKey("regions.id", ondelete="SET NULL"), nullable=True, index=True)
+    # postal_address is retired in favor of region
     postal_address = Column(String, nullable=True)
 
     # Employment Information
@@ -60,6 +65,8 @@ class Employee(BaseModel):
     documents = relationship("EmployeeDocument", back_populates="employee", cascade="all, delete-orphan")
     employment_history = relationship("EmploymentHistory", back_populates="employee", cascade="all, delete-orphan")
     payrolls = relationship("Payroll", back_populates="employee", cascade="all, delete-orphan")
+    region_obj = relationship("Region", back_populates="employees", foreign_keys=[region_id])
+    zone_manager_assignments = relationship("ZoneManager", back_populates="employee", cascade="all, delete-orphan")
 
 
 class EmployeeBankAccount(BaseModel):
@@ -82,14 +89,24 @@ class EmployeeReferee(BaseModel):
 
     employee_id = Column(UUID(as_uuid=True), ForeignKey("employees.id", ondelete="CASCADE"), nullable=False, index=True)
     full_name = Column(String, nullable=False)
-    referee_relationship = Column(String, nullable=False)  # Renamed from 'relationship' to avoid conflict
+    referee_relationship = Column(
+        SQLEnum(
+            Relationship,
+            name="relationship",
+            native_enum=False,
+            create_constraint=False,
+            validate_strings=True,
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
+        nullable=False,
+    )
     phone_number = Column(String, nullable=False)
     alternate_phone = Column(String, nullable=True)
-    id_type = Column(SQLEnum(IDType, name="id_type", create_type=True), nullable=True)
-    id_number = Column(String, nullable=True)
+    id_type = Column(SQLEnum(IDType, name="id_type", create_type=True), nullable=False)
+    id_number = Column(String, nullable=False)
     id_softcopy_file = Column(String, nullable=True)
-    address = Column(String, nullable=True)
-    occupation = Column(String, nullable=True)
+    address = Column(String, nullable=False)
+    occupation = Column(String, nullable=False)
     notes = Column(String, nullable=True)
 
     # Relationships
@@ -102,12 +119,23 @@ class EmployeeNextOfKin(BaseModel):
 
     employee_id = Column(UUID(as_uuid=True), ForeignKey("employees.id", ondelete="CASCADE"), nullable=False, index=True)
     full_name = Column(String, nullable=False)
-    kin_relationship = Column(String, nullable=False)  # Renamed from 'relationship' to avoid conflict
+    kin_relationship = Column(
+        SQLEnum(
+            Relationship,
+            name="relationship",
+            native_enum=False,
+            create_constraint=False,
+            validate_strings=True,
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
+        nullable=False,
+    )
     phone_1 = Column(String, nullable=False)
     phone_2 = Column(String, nullable=True)
-    address = Column(String, nullable=True)
-    id_type = Column(SQLEnum(IDType, name="id_type_nok", create_type=True), nullable=True)
-    id_number = Column(String, nullable=True)
+    address = Column(String, nullable=False)
+    occupation = Column(String, nullable=True)
+    id_type = Column(SQLEnum(IDType, name="id_type_nok", create_type=True), nullable=False)
+    id_number = Column(String, nullable=False)
     id_softcopy_file = Column(String, nullable=True)
     notes = Column(String, nullable=True)
 

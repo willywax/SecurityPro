@@ -13,6 +13,7 @@ class Payroll(BaseModel):
     payroll_id = Column(String, nullable=False, index=True)  # PAY0001, PAY0002, etc.
     payroll_month = Column(String, nullable=False, index=True)  # Format: YYYY-MM (e.g., "2026-03")
     employee_id = Column(UUID(as_uuid=True), ForeignKey("employees.id", ondelete="CASCADE"), nullable=False, index=True)
+    zone_id = Column(UUID(as_uuid=True), ForeignKey("zones.id", ondelete="SET NULL"), nullable=True, index=True)
     base_salary = Column(Float, nullable=False)
     allowances = Column(Float, default=0.0, nullable=False)
     deductions = Column(Float, default=0.0, nullable=False)
@@ -32,3 +33,4 @@ class Payroll(BaseModel):
 
     # Relationships
     employee = relationship("Employee", back_populates="payrolls")
+    zone = relationship("Zone", back_populates="payrolls")

@@ -101,12 +101,20 @@ class TestClientCRUD:
     created_client_id = None  # will be set after create
 
     def test_create_client_minimal(self, headers):
-        """Create client with only required field (client_name)"""
-        payload = {"client_name": "TEST_Client_Minimal"}
+        """Create client with required fields"""
+        payload = {
+            "client_name": "TEST_Client_Minimal",
+            "contact_person": "John Doe",
+            "phone_1": "+256700123456",
+            "address": "123 Test Street"
+        }
         resp = requests.post(f"{BASE_URL}/api/clients", json=payload, headers=headers)
         assert resp.status_code == 201, f"Expected 201, got {resp.status_code}: {resp.text}"
         data = resp.json()
         assert data["client_name"] == "TEST_Client_Minimal"
+        assert data["contact_person"] == "John Doe"
+        assert data["phone_1"] == "+256700123456"
+        assert data["address"] == "123 Test Street"
         assert "client_id" in data
         assert data["client_id"].startswith("CLT"), f"client_id format wrong: {data['client_id']}"
         assert "id" in data

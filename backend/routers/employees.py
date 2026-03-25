@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File,
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import Optional, List
 from datetime import datetime, timezone, date
 from uuid import UUID
@@ -12,13 +12,14 @@ import uuid
 import os
 import shutil
 from pathlib import Path
+import re
 
 from db.dependencies import get_db
 from models.employee import (
     Employee, EmployeeBankAccount, EmployeeReferee, EmployeeNextOfKin,
     EmployeeContract, EmployeeDocument, EmploymentHistory
 )
-from models.enums import Gender, MaritalStatus, EmploymentStatus, IDType, ContractStatus
+from models.enums import Gender, MaritalStatus, EmploymentStatus, IDType, ContractStatus, Relationship
 from utils.auth import get_token_data
 
 router = APIRouter(prefix="/employees", tags=["Employees"])
@@ -35,25 +36,52 @@ DOCUMENTS_DIR.mkdir(parents=True, exist_ok=True)
 # ============ SCHEMAS ============
 
 class EmployeeCreate(BaseModel):
-    first_name: str
+    first_name: str = Field(..., min_length=1)
     middle_name: Optional[str] = None
-    last_name: str
+    last_name: str = Field(..., min_length=1)
     gender: Optional[Gender] = None
     date_of_birth: Optional[date] = None
     marital_status: Optional[MaritalStatus] = None
-    nationality: Optional[str] = None
+    nationality: str = Field(..., min_length=1)  # Made required
     nin: Optional[str] = None
-    phone_1: str
+    phone_1: str = Field(..., min_length=1)
     phone_2: Optional[str] = None
     email: Optional[EmailStr] = None
-    physical_address: Optional[str] = None
+    physical_address: str = Field(..., min_length=5)
+    region: Optional[str] = None
+    region_id: Optional[UUID] = None
+    # postal_address is replaced by region_id and kept for backward compatibility
     postal_address: Optional[str] = None
     education_background: Optional[str] = None
-    job_title: Optional[str] = None
+    job_title: str = Field(..., min_length=1)
     employment_status: EmploymentStatus = EmploymentStatus.ACTIVE
     hire_date: Optional[date] = None
+    date_joined: Optional[date] = None
     termination_date: Optional[date] = None
     notes: Optional[str] = None
+
+    @field_validator('nin')
+    @classmethod
+    def validate_nin(cls, v):
+        if v is not None and (not v.isdigit() or len(v) != 20):
+            raise ValueError('NIN must be exactly 20 digits')
+        return v
+
+    @field_validator('phone_1', 'phone_2')
+    @classmethod
+    def validate_phone(cls, v):
+        if v is not None:
+            # Tanzanian phone number validation: +255XXXXXXXXX or 0XXXXXXXXX
+            pattern = r'^(\+255|0)[67]\d{8}$'
+            if not re.match(pattern, v):
+                raise ValueError('Phone number must be a valid Tanzanian number (+255XXXXXXXXX or 0XXXXXXXXX)')
+        return v
+
+    @field_validator('nationality')
+    @classmethod
+    def validate_nationality(cls, v):
+        # For now, just ensure it's not empty, but could add country validation later
+        return v
 
 
 class EmployeeUpdate(BaseModel):
@@ -69,6 +97,8 @@ class EmployeeUpdate(BaseModel):
     phone_2: Optional[str] = None
     email: Optional[EmailStr] = None
     physical_address: Optional[str] = None
+    region: Optional[str] = None
+    region_id: Optional[UUID] = None
     postal_address: Optional[str] = None
     education_background: Optional[str] = None
     job_title: Optional[str] = None
@@ -95,7 +125,11 @@ class EmployeeResponse(BaseModel):
     phone_1: str
     phone_2: Optional[str] = None
     email: Optional[EmailStr] = None
-    physical_address: Optional[str] = None
+    physical_address: str
+    region: Optional[str] = None
+    region_id: Optional[UUID] = None
+    region_name: Optional[str] = None
+    zone_name: Optional[str] = None
     postal_address: Optional[str] = None
     education_background: Optional[str] = None
     job_title: Optional[str] = None
@@ -143,13 +177,13 @@ class BankAccountResponse(BaseModel):
 # Referee Schemas
 class RefereeCreate(BaseModel):
     full_name: str
-    referee_relationship: str
+    referee_relationship: Relationship
     phone_number: str
     alternate_phone: Optional[str] = None
-    id_type: Optional[IDType] = None
-    id_number: Optional[str] = None
-    address: Optional[str] = None
-    occupation: Optional[str] = None
+    id_type: IDType
+    id_number: str
+    address: str
+    occupation: str
     notes: Optional[str] = None
 
 
@@ -157,13 +191,13 @@ class RefereeResponse(BaseModel):
     id: UUID
     employee_id: UUID
     full_name: str
-    referee_relationship: str
+    referee_relationship: Relationship
     phone_number: str
     alternate_phone: Optional[str] = None
-    id_type: Optional[IDType] = None
-    id_number: Optional[str] = None
-    address: Optional[str] = None
-    occupation: Optional[str] = None
+    id_type: IDType
+    id_number: str
+    address: str
+    occupation: str
     notes: Optional[str] = None
     created_at: datetime
 
@@ -174,12 +208,13 @@ class RefereeResponse(BaseModel):
 # Next of Kin Schemas
 class NextOfKinCreate(BaseModel):
     full_name: str
-    kin_relationship: str
+    kin_relationship: Relationship
     phone_1: str
     phone_2: Optional[str] = None
-    address: Optional[str] = None
-    id_type: Optional[IDType] = None
-    id_number: Optional[str] = None
+    address: str
+    occupation: str
+    id_type: IDType
+    id_number: str
     notes: Optional[str] = None
 
 
@@ -187,12 +222,13 @@ class NextOfKinResponse(BaseModel):
     id: UUID
     employee_id: UUID
     full_name: str
-    kin_relationship: str
+    kin_relationship: Relationship
     phone_1: str
     phone_2: Optional[str] = None
-    address: Optional[str] = None
-    id_type: Optional[IDType] = None
-    id_number: Optional[str] = None
+    address: str
+    occupation: Optional[str] = None
+    id_type: IDType
+    id_number: str
     notes: Optional[str] = None
     created_at: datetime
 
@@ -321,15 +357,37 @@ async def generate_guard_no(db: AsyncSession, org_id: UUID) -> str:
     return "G0001"
 
 
+async def build_employee_response(employee: Employee, db: AsyncSession) -> dict:
+    """Enrich an employee with region and zone labels for API responses."""
+    from models.zone import Region, Zone
+
+    emp_dict = {c.key: getattr(employee, c.key) for c in employee.__table__.columns}
+    emp_dict["region_name"] = None
+    emp_dict["zone_name"] = None
+
+    if employee.region_id:
+        region_result = await db.execute(select(Region).where(Region.id == employee.region_id))
+        region = region_result.scalar_one_or_none()
+        if region:
+            emp_dict["region_name"] = region.region_name
+            zone_result = await db.execute(select(Zone).where(Zone.id == region.zone_id))
+            zone = zone_result.scalar_one_or_none()
+            emp_dict["zone_name"] = zone.zone_name if zone else None
+
+    return emp_dict
+
+
 # ============ EMPLOYEE CRUD ENDPOINTS ============
 
-@router.post("/", response_model=EmployeeResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=EmployeeResponse, status_code=status.HTTP_201_CREATED)
 async def create_employee(
     employee: EmployeeCreate,
     db: AsyncSession = Depends(get_db),
     token_data: dict = Depends(get_token_data)
 ):
     """Create a new employee"""
+    from models.zone import Region
+
     org_id = UUID(token_data.get("org_id"))
     user_id = UUID(token_data.get("sub"))
 
@@ -337,28 +395,50 @@ async def create_employee(
     employee_id = await generate_employee_id(db, org_id)
     guard_no = await generate_guard_no(db, org_id)
 
+    # Map old inputs into the new hire_date semantics (date_joined is now used for join date)
+    payload = employee.model_dump()
+
+    if payload.get('date_joined'):
+        payload['hire_date'] = payload['date_joined']
+    payload.pop('date_joined', None)
+
+    if payload.get('termination_date') and not payload.get('hire_date'):
+        # legacy behavior: interpret termination_date as join date when used this way
+        payload['hire_date'] = payload['termination_date']
+        payload['termination_date'] = None
+
+    payload.pop('date_left', None)
+
+    if payload.get("region_id"):
+        region_result = await db.execute(
+            select(Region.id).where(Region.id == payload["region_id"], Region.org_id == org_id)
+        )
+        if not region_result.scalar_one_or_none():
+            raise HTTPException(status_code=404, detail="Region not found")
+
     # Create employee
     new_employee = Employee(
         org_id=org_id,
         employee_id=employee_id,
         guard_no=guard_no,
         created_by=user_id,
-        **employee.model_dump()
+        **payload
     )
 
     db.add(new_employee)
     await db.commit()
     await db.refresh(new_employee)
 
-    return new_employee
+    return await build_employee_response(new_employee, db)
 
 
-@router.get("/", response_model=EmployeeListResponse)
+@router.get("", response_model=EmployeeListResponse)
 async def get_employees(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     search: Optional[str] = None,
     status_filter: Optional[EmploymentStatus] = None,
+    region_id: Optional[UUID] = None,
     db: AsyncSession = Depends(get_db),
     token_data: dict = Depends(get_token_data)
 ):
@@ -381,6 +461,8 @@ async def get_employees(
         )
     if status_filter:
         query = query.where(Employee.employment_status == status_filter)
+    if region_id:
+        query = query.where(Employee.region_id == region_id)
 
     # Count total
     count_query = select(func.count()).select_from(query.subquery())
@@ -394,8 +476,13 @@ async def get_employees(
     result = await db.execute(query)
     employees = result.scalars().all()
 
+    # Enrich with region/zone names
+    enriched = []
+    for emp in employees:
+        enriched.append(await build_employee_response(emp, db))
+
     return EmployeeListResponse(
-        employees=employees,
+        employees=enriched,
         total=total,
         page=page,
         page_size=page_size,
@@ -420,7 +507,7 @@ async def get_employee(
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
 
-    return employee
+    return await build_employee_response(employee, db)
 
 
 @router.put("/{employee_id}", response_model=EmployeeResponse)
@@ -449,7 +536,7 @@ async def update_employee(
     await db.commit()
     await db.refresh(employee)
 
-    return employee
+    return await build_employee_response(employee, db)
 
 
 @router.delete("/{employee_id}", response_model=MessageResponse)
@@ -1088,7 +1175,7 @@ async def upload_photo(
     await db.commit()
     await db.refresh(employee)
 
-    return employee
+    return await build_employee_response(employee, db)
 
 
 @router.post("/{employee_id}/upload-document", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)

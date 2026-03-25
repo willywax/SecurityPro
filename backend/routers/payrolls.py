@@ -13,6 +13,7 @@ import re
 from db.dependencies import get_db
 from models.payroll import Payroll
 from models.employee import Employee
+from models.zone import Zone
 from models.enums import PayrollStatus
 from utils.auth import get_token_data
 
@@ -24,6 +25,7 @@ router = APIRouter(prefix="/payroll", tags=["Payroll"])
 class PayrollCreate(BaseModel):
     payroll_month: str          # YYYY-MM format
     employee_id: UUID
+    zone_id: Optional[UUID] = None
     base_salary: float
     allowances: float = 0.0
     deductions: float = 0.0
@@ -56,6 +58,8 @@ class PayrollResponse(BaseModel):
     employee_id: UUID
     employee_name: Optional[str] = None
     employee_code: Optional[str] = None
+    zone_id: Optional[UUID] = None
+    zone_name: Optional[str] = None
     base_salary: float
     allowances: float
     deductions: float
@@ -140,7 +144,7 @@ def calculate_net_pay(base: float, allowances: float, overtime: float, deduction
 
 # ============ CRUD ENDPOINTS ============
 
-@router.post("/", response_model=PayrollResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=PayrollResponse, status_code=status.HTTP_201_CREATED)
 async def create_payroll(
     payroll: PayrollCreate,
     db: AsyncSession = Depends(get_db),
@@ -201,12 +205,13 @@ async def create_payroll(
     return response_data
 
 
-@router.get("/", response_model=PayrollListResponse)
+@router.get("", response_model=PayrollListResponse)
 async def get_payrolls(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     month: Optional[str] = None,
     status_filter: Optional[PayrollStatus] = None,
+    zone_id: Optional[UUID] = None,
     db: AsyncSession = Depends(get_db),
     token_data: dict = Depends(get_token_data)
 ):
@@ -221,6 +226,8 @@ async def get_payrolls(
         query = query.where(Payroll.payroll_month == month)
     if status_filter:
         query = query.where(Payroll.status == status_filter)
+    if zone_id:
+        query = query.where(Payroll.zone_id == zone_id)
 
     # Count total
     count_query = select(func.count()).select_from(query.subquery())
@@ -234,7 +241,7 @@ async def get_payrolls(
     result = await db.execute(query)
     payrolls = result.scalars().all()
 
-    # Enrich with employee details
+    # Enrich with employee and zone details
     payroll_responses = []
     for payroll in payrolls:
         emp_result = await db.execute(
@@ -246,6 +253,10 @@ async def get_payrolls(
         if employee:
             response_data.employee_name = f"{employee.first_name} {employee.last_name}"
             response_data.employee_code = employee.employee_id
+        if payroll.zone_id:
+            zone = (await db.execute(select(Zone).where(Zone.id == payroll.zone_id))).scalar_one_or_none()
+            if zone:
+                response_data.zone_name = zone.zone_name
 
         payroll_responses.append(response_data)
 

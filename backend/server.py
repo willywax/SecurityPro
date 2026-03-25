@@ -26,6 +26,8 @@ from routers import sites
 from routers import assets
 from routers import payrolls
 from routers import invoices
+from routers import zones
+from routers import regions
 
 
 @asynccontextmanager
@@ -50,6 +52,7 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+app.router.redirect_slashes = False
 
 # CORS must be registered before any mounts/routes so it wraps the full app
 app.add_middleware(
@@ -68,10 +71,11 @@ app.mount("/uploads", StaticFiles(directory=str(uploads_dir)), name="uploads")
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
+api_router.redirect_slashes = False
 
 
 # Health check endpoint
-@api_router.get("/")
+@api_router.get("")
 async def root():
     return {"message": "Security Operations SaaS API", "status": "healthy"}
 
@@ -116,6 +120,8 @@ api_router.include_router(sites.router)
 api_router.include_router(assets.router)
 api_router.include_router(payrolls.router)
 api_router.include_router(invoices.router)
+api_router.include_router(zones.router)
+api_router.include_router(regions.router)
 
 # Include the router in the main app
 app.include_router(api_router)

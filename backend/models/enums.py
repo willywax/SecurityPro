@@ -47,6 +47,24 @@ class IDType(str, enum.Enum):
     OTHER = "other"
 
 
+class Relationship(str, enum.Enum):
+    """Relationship types for referees and next of kin."""
+    FATHER = "father"
+    MOTHER = "mother"
+    BROTHER = "brother"
+    SISTER = "sister"
+    SPOUSE = "spouse"
+    SON = "son"
+    DAUGHTER = "daughter"
+    UNCLE = "uncle"
+    AUNT = "aunt"
+    COUSIN = "cousin"
+    FRIEND = "friend"
+    COLLEAGUE = "colleague"
+    NEIGHBOR = "neighbor"
+    OTHER = "other"
+
+
 class ContractType(str, enum.Enum):
     """Employment contract types."""
     FULL_TIME = "full_time"
@@ -65,6 +83,20 @@ class ContractStatus(str, enum.Enum):
     ACTIVE = "active"
     EXPIRED = "expired"
     TERMINATED = "terminated"
+
+
+# ============ Zone & Region Enums ============
+
+class ZoneStatus(str, enum.Enum):
+    """Zone status types."""
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+
+
+class RegionStatus(str, enum.Enum):
+    """Region status types."""
+    ACTIVE = "active"
+    INACTIVE = "inactive"
 
 
 # ============ Client & Site Enums ============

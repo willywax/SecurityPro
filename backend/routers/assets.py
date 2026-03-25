@@ -145,7 +145,7 @@ async def generate_asset_id(db: AsyncSession, org_id: UUID) -> str:
 
 # ============ ASSET CRUD ENDPOINTS ============
 
-@router.post("/", response_model=AssetResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=AssetResponse, status_code=status.HTTP_201_CREATED)
 async def create_asset(
     asset: AssetCreate,
     db: AsyncSession = Depends(get_db),
@@ -173,7 +173,7 @@ async def create_asset(
     return new_asset
 
 
-@router.get("/", response_model=AssetListResponse)
+@router.get("", response_model=AssetListResponse)
 async def get_assets(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),

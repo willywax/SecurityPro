@@ -21,12 +21,12 @@ router = APIRouter(prefix="/clients", tags=["Clients"])
 
 class ClientCreate(BaseModel):
     client_name: str
-    contact_person: Optional[str] = None
-    phone_1: Optional[str] = None
+    contact_person: str
+    phone_1: str
     phone_2: Optional[str] = None
     email: Optional[EmailStr] = None
     billing_email: Optional[EmailStr] = None
-    address: Optional[str] = None
+    address: str
     status: ClientStatus = ClientStatus.ACTIVE
     notes: Optional[str] = None
 
@@ -100,7 +100,7 @@ async def generate_client_id(db: AsyncSession, org_id: UUID) -> str:
 
 # ============ CRUD ENDPOINTS ============
 
-@router.post("/", response_model=ClientResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ClientResponse, status_code=status.HTTP_201_CREATED)
 async def create_client(
     client: ClientCreate,
     db: AsyncSession = Depends(get_db),
@@ -128,7 +128,7 @@ async def create_client(
     return new_client
 
 
-@router.get("/", response_model=ClientListResponse)
+@router.get("", response_model=ClientListResponse)
 async def get_clients(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),

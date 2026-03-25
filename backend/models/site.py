@@ -12,6 +12,7 @@ class Site(BaseModel):
 
     site_id = Column(String, nullable=False, index=True)  # SITE001, SITE002, etc.
     client_id = Column(UUID(as_uuid=True), ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True)
+    region_id = Column(UUID(as_uuid=True), ForeignKey("regions.id", ondelete="SET NULL"), nullable=True, index=True)
     site_name = Column(String, nullable=False)
     region = Column(String, nullable=True)
     district = Column(String, nullable=True)
@@ -28,3 +29,4 @@ class Site(BaseModel):
 
     # Relationships
     client = relationship("Client", back_populates="sites")
+    region_obj = relationship("Region", back_populates="sites", foreign_keys=[region_id])
