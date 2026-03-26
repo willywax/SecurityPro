@@ -20,7 +20,9 @@ import {
   ChevronDown,
   Globe,
   Map,
+  UserCog,
 } from 'lucide-react';
+import { USER_MANAGEMENT_ROLES } from '@/constants/userRoles';
 
 const assetsSubNav = [
   { name: 'Store', href: '/store', icon: Store },
@@ -49,6 +51,7 @@ const Sidebar = ({ onClose }) => {
   const location = useLocation();
   const isAssetsActive = assetsSubNav.some(item => location.pathname.startsWith(item.href));
   const [assetsOpen, setAssetsOpen] = useState(isAssetsActive);
+  const canManageUsers = USER_MANAGEMENT_ROLES.has(user?.role);
 
   const handleLogout = async () => {
     await logout();
@@ -149,6 +152,18 @@ const Sidebar = ({ onClose }) => {
             {item.name}
           </NavLink>
         ))}
+
+        {canManageUsers && (
+          <NavLink
+            to="/users"
+            onClick={onClose}
+            className={navLinkClass}
+            data-testid="nav-users"
+          >
+            <UserCog className="w-5 h-5 flex-shrink-0" />
+            Users
+          </NavLink>
+        )}
       </nav>
 
       {/* Bottom Section */}

@@ -7,6 +7,9 @@ import enum
 class UserRole(str, enum.Enum):
     """User role types for access control."""
     ADMIN = "admin"
+    DIRECTOR = "director"
+    HR = "hr"
+    ZONE_MANAGER = "zone_manager"
     MANAGER = "manager"
     SUPERVISOR = "supervisor"
     GUARD = "guard"

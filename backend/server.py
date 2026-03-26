@@ -20,6 +20,7 @@ from models.organization import Organization
 
 # Import routers
 from routers import auth
+from routers import dashboard
 from routers import employees
 from routers import contracts
 from routers import clients
@@ -33,6 +34,7 @@ from routers import store
 from routers import inventory
 from routers import issuances
 from routers import write_offs
+from routers import users
 
 
 async def run_contract_expiry_check():
@@ -158,6 +160,7 @@ async def get_organization(
 
 # Include routers
 api_router.include_router(auth.router)
+api_router.include_router(dashboard.router)
 api_router.include_router(employees.router)
 api_router.include_router(contracts.router)
 api_router.include_router(clients.router)
@@ -171,6 +174,7 @@ api_router.include_router(store.router)
 api_router.include_router(inventory.router)
 api_router.include_router(issuances.router)
 api_router.include_router(write_offs.router)
+api_router.include_router(users.router)
 
 # Include the router in the main app
 app.include_router(api_router)

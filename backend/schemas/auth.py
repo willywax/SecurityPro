@@ -35,10 +35,12 @@ class UserCreate(BaseModel):
     last_name: str
     role: UserRole
     employee_id: Optional[UUID] = None
+    is_active: bool = True
 
 
 class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
+    password: Optional[str] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     role: Optional[UserRole] = None

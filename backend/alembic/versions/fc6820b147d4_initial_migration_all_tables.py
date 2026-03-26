@@ -336,7 +336,7 @@ def upgrade() -> None:
     sa.Column('password_hash', sa.String(), nullable=False),
     sa.Column('first_name', sa.String(), nullable=False),
     sa.Column('last_name', sa.String(), nullable=False),
-    sa.Column('role', sa.Enum('ADMIN', 'MANAGER', 'SUPERVISOR', 'GUARD', 'VIEWER', name='user_role'), nullable=False),
+    sa.Column('role', sa.Enum('ADMIN', 'DIRECTOR', 'HR', 'ZONE_MANAGER', 'MANAGER', 'SUPERVISOR', 'GUARD', 'VIEWER', name='user_role'), nullable=False),
     sa.Column('is_active', sa.Boolean(), nullable=False),
     sa.Column('last_login', sa.DateTime(timezone=True), nullable=True),
     sa.Column('employee_id', sa.UUID(), nullable=True),

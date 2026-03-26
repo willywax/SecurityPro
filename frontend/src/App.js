@@ -29,6 +29,7 @@ import ZoneList from './pages/ZoneList';
 import ZoneDetail from './pages/ZoneDetail';
 import RegionList from './pages/RegionList';
 import RegionDetail from './pages/RegionDetail';
+import UsersPage from './pages/UsersPage';
 import { Toaster } from './components/ui/sonner';
 
 // Placeholder pages for navigation items
@@ -85,6 +86,7 @@ function App() {
             <Route path="/regions" element={<RegionList />} />
             <Route path="/regions/new" element={<RegionDetail />} />
             <Route path="/regions/:id" element={<RegionDetail />} />
+            <Route path="/users" element={<UsersPage />} />
             <Route path="/settings" element={<PlaceholderPage title="Settings" />} />
           </Route>
 
