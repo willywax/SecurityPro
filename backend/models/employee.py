@@ -1,5 +1,5 @@
 """Employee and related models."""
-from sqlalchemy import Column, String, Text, Date, ForeignKey, Enum as SQLEnum, Boolean, Integer, Float
+from sqlalchemy import Column, String, Text, Date, DateTime, ForeignKey, Enum as SQLEnum, Boolean, Integer, Float
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
 from models.base import BaseModel
@@ -24,7 +24,8 @@ class Employee(BaseModel):
     guard_no = Column(String, nullable=True, index=True)  # G0001, G0002, etc.
 
     # Personal Information
-    profile_photo = Column(String, nullable=True)
+    profile_photo = Column(String, nullable=True)   # legacy local path
+    photo_path = Column(String, nullable=True)       # GCS object path
     first_name = Column(String, nullable=False)
     middle_name = Column(String, nullable=True)
     last_name = Column(String, nullable=False)
@@ -179,14 +180,23 @@ class EmployeeContract(BaseModel):
 
 
 class EmployeeDocument(BaseModel):
-    """Employee document attachments."""
+    """Employee document attachments (GCS-backed)."""
     __tablename__ = "employee_documents"
 
     employee_id = Column(UUID(as_uuid=True), ForeignKey("employees.id", ondelete="CASCADE"), nullable=False, index=True)
-    document_type = Column(String, nullable=False)  # e.g., "id_card", "certificate", "license"
-    name = Column(String, nullable=False)
-    file_url = Column(String, nullable=False)
+    document_type = Column(String, nullable=False)  # national_id|referee_id|next_of_kin_id|contract|certificate|disciplinary_letter|other
+    # Legacy columns (kept for backward compat)
+    name = Column(String, nullable=True)
+    file_url = Column(String, nullable=True)
     expiry_date = Column(Date, nullable=True)
+    # New GCS-backed columns
+    title = Column(String, nullable=True)             # user-provided label, e.g. "NIDA Card"
+    original_filename = Column(String, nullable=True)
+    gcs_path = Column(String, nullable=True)          # GCS object path (never a URL)
+    file_size_bytes = Column(Integer, nullable=True)
+    mime_type = Column(String, nullable=True)
+    uploaded_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    uploaded_at = Column(DateTime(timezone=True), nullable=True)
     notes = Column(String, nullable=True)
 
     # Relationships

@@ -115,6 +115,7 @@ class EmployeeResponse(BaseModel):
     employee_id: str
     guard_no: Optional[str] = None
     profile_photo: Optional[str] = None
+    photo_path: Optional[str] = None
     first_name: str
     middle_name: Optional[str] = None
     last_name: str
@@ -1080,97 +1081,6 @@ async def get_active_contract(
     }
 
 
-# ============ DOCUMENT ENDPOINTS ============
-
-@router.post("/{employee_id}/documents", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
-async def add_document(
-    employee_id: UUID,
-    document: DocumentCreate,
-    db: AsyncSession = Depends(get_db),
-    token_data: dict = Depends(get_token_data)
-):
-    """Add a document to an employee"""
-    org_id = UUID(token_data.get("org_id"))
-    user_id = UUID(token_data.get("sub"))
-
-    # Verify employee exists
-    emp_result = await db.execute(
-        select(Employee).where(Employee.id == employee_id, Employee.org_id == org_id)
-    )
-    employee = emp_result.scalar_one_or_none()
-
-    if not employee:
-        raise HTTPException(status_code=404, detail="Employee not found")
-
-    # Create document
-    new_document = EmployeeDocument(
-        org_id=org_id,
-        employee_id=employee_id,
-        created_by=user_id,
-        **document.model_dump()
-    )
-
-    db.add(new_document)
-    await db.commit()
-    await db.refresh(new_document)
-
-    return new_document
-
-
-@router.get("/{employee_id}/documents", response_model=List[DocumentResponse])
-async def get_documents(
-    employee_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    token_data: dict = Depends(get_token_data)
-):
-    """Get all documents for an employee"""
-    org_id = UUID(token_data.get("org_id"))
-
-    result = await db.execute(
-        select(EmployeeDocument)
-        .where(EmployeeDocument.employee_id == employee_id, EmployeeDocument.org_id == org_id)
-        .order_by(EmployeeDocument.created_at.desc())
-    )
-    documents = result.scalars().all()
-
-    return documents
-
-
-@router.delete("/{employee_id}/documents/{document_id}", response_model=MessageResponse)
-async def delete_document(
-    employee_id: UUID,
-    document_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    token_data: dict = Depends(get_token_data)
-):
-    """Delete a document"""
-    org_id = UUID(token_data.get("org_id"))
-
-    result = await db.execute(
-        select(EmployeeDocument).where(
-            EmployeeDocument.id == document_id,
-            EmployeeDocument.employee_id == employee_id,
-            EmployeeDocument.org_id == org_id
-        )
-    )
-    document = result.scalar_one_or_none()
-
-    if not document:
-        raise HTTPException(status_code=404, detail="Document not found")
-
-    # Delete physical file if exists
-    if document.file_path and os.path.exists(document.file_path):
-        try:
-            os.remove(document.file_path)
-        except Exception:
-            pass  # Continue even if file deletion fails
-
-    await db.delete(document)
-    await db.commit()
-
-    return MessageResponse(message="Document deleted successfully")
-
-
 # ============ EMPLOYMENT HISTORY ENDPOINTS ============
 
 @router.post("/{employee_id}/employment-history", response_model=EmploymentHistoryResponse, status_code=status.HTTP_201_CREATED)
@@ -1364,3 +1274,300 @@ async def upload_document(
     await db.refresh(new_document)
 
     return new_document
+
+
+# ============ GCS PHOTO + DOCUMENT ENDPOINTS ============
+
+VALID_PHOTO_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
+PHOTO_MAX_BYTES = 5 * 1024 * 1024  # 5 MB
+
+VALID_DOC_CONTENT_TYPES = {"application/pdf", "image/jpeg", "image/jpg", "image/png", "image/webp"}
+DOC_MAX_BYTES = 20 * 1024 * 1024  # 20 MB
+
+VALID_DOCUMENT_TYPES = {
+    "national_id", "referee_id", "next_of_kin_id",
+    "contract", "certificate", "disciplinary_letter", "other",
+}
+
+
+class GCSDocumentResponse(BaseModel):
+    id: UUID
+    employee_id: UUID
+    document_type: str
+    title: Optional[str] = None
+    original_filename: Optional[str] = None
+    gcs_path: Optional[str] = None
+    file_size_bytes: Optional[int] = None
+    mime_type: Optional[str] = None
+    uploaded_by: Optional[UUID] = None
+    uploaded_by_name: Optional[str] = None
+    uploaded_at: Optional[datetime] = None
+    notes: Optional[str] = None
+    created_at: datetime
+    view_url: Optional[str] = None
+    download_url: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+def _build_doc_response(doc: EmployeeDocument, uploaded_by_name: Optional[str] = None) -> dict:
+    from services.storage_service import storage_service
+    view_url = None
+    download_url = None
+    if doc.gcs_path:
+        try:
+            view_url = storage_service.get_signed_url(doc.gcs_path, expiry_minutes=60)
+            download_url = storage_service.get_download_url(
+                doc.gcs_path,
+                original_filename=doc.original_filename or "document",
+                expiry_minutes=60,
+            )
+        except Exception:
+            pass
+
+    return {
+        "id": doc.id,
+        "employee_id": doc.employee_id,
+        "document_type": doc.document_type,
+        "title": doc.title,
+        "original_filename": doc.original_filename,
+        "gcs_path": doc.gcs_path,
+        "file_size_bytes": doc.file_size_bytes,
+        "mime_type": doc.mime_type,
+        "uploaded_by": doc.uploaded_by,
+        "uploaded_by_name": uploaded_by_name,
+        "uploaded_at": doc.uploaded_at,
+        "notes": doc.notes,
+        "created_at": doc.created_at,
+        "view_url": view_url,
+        "download_url": download_url,
+    }
+
+
+@router.post("/{employee_id}/photo")
+async def upload_gcs_photo(
+    employee_id: UUID,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    token_data: dict = Depends(get_token_data),
+):
+    """Upload employee profile photo to GCS. Returns { photo_url }."""
+    from services.storage_service import storage_service
+
+    org_id = UUID(token_data.get("org_id"))
+
+    result = await db.execute(select(Employee).where(Employee.id == employee_id, Employee.org_id == org_id))
+    employee = result.scalar_one_or_none()
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+
+    if file.content_type not in VALID_PHOTO_CONTENT_TYPES:
+        raise HTTPException(status_code=400, detail="Only jpg, png, webp photos are allowed")
+
+    contents = await file.read()
+    if len(contents) > PHOTO_MAX_BYTES:
+        raise HTTPException(status_code=400, detail="Photo must be under 5 MB")
+
+    if employee.photo_path:
+        storage_service.delete_file(employee.photo_path)
+
+    gcs_path = storage_service.upload_file(
+        file_bytes=contents,
+        folder="employees/photos",
+        entity_id=str(employee_id),
+        original_filename=file.filename or "profile.jpg",
+        content_type=file.content_type,
+    )
+
+    employee.photo_path = gcs_path
+    await db.commit()
+
+    photo_url = storage_service.get_signed_url(gcs_path, expiry_minutes=60)
+    return {"photo_url": photo_url, "gcs_path": gcs_path}
+
+
+@router.get("/{employee_id}/photo")
+async def get_gcs_photo(
+    employee_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    token_data: dict = Depends(get_token_data),
+):
+    """Return a fresh signed URL for the employee's current photo."""
+    from services.storage_service import storage_service
+
+    org_id = UUID(token_data.get("org_id"))
+
+    result = await db.execute(select(Employee).where(Employee.id == employee_id, Employee.org_id == org_id))
+    employee = result.scalar_one_or_none()
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+
+    if not employee.photo_path:
+        return {"photo_url": None}
+
+    try:
+        photo_url = storage_service.get_signed_url(employee.photo_path, expiry_minutes=60)
+        return {"photo_url": photo_url}
+    except Exception:
+        return {"photo_url": None}
+
+
+@router.post("/{employee_id}/documents", response_model=GCSDocumentResponse, status_code=201)
+async def upload_gcs_document(
+    employee_id: UUID,
+    file: UploadFile = File(...),
+    document_type: str = Query(...),
+    title: str = Query(...),
+    notes: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    token_data: dict = Depends(get_token_data),
+):
+    """Upload a document for an employee to GCS."""
+    from services.storage_service import storage_service
+    from datetime import timezone as tz
+
+    org_id = UUID(token_data.get("org_id"))
+    user_id = UUID(token_data.get("sub"))
+
+    if document_type not in VALID_DOCUMENT_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid document_type. Must be one of: {', '.join(sorted(VALID_DOCUMENT_TYPES))}",
+        )
+
+    if file.content_type not in VALID_DOC_CONTENT_TYPES:
+        raise HTTPException(status_code=400, detail="Allowed formats: pdf, jpg, jpeg, png, webp")
+
+    emp_result = await db.execute(select(Employee).where(Employee.id == employee_id, Employee.org_id == org_id))
+    if not emp_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Employee not found")
+
+    contents = await file.read()
+    if len(contents) > DOC_MAX_BYTES:
+        raise HTTPException(status_code=400, detail="File must be under 20 MB")
+
+    gcs_path = storage_service.upload_file(
+        file_bytes=contents,
+        folder="employees/documents",
+        entity_id=str(employee_id),
+        original_filename=file.filename or "document",
+        content_type=file.content_type,
+    )
+
+    doc = EmployeeDocument(
+        org_id=org_id,
+        employee_id=employee_id,
+        document_type=document_type,
+        title=title,
+        original_filename=file.filename,
+        gcs_path=gcs_path,
+        file_size_bytes=len(contents),
+        mime_type=file.content_type,
+        uploaded_by=user_id,
+        uploaded_at=datetime.now(tz=tz.utc),
+        notes=notes,
+        created_by=user_id,
+    )
+    db.add(doc)
+    await db.commit()
+    await db.refresh(doc)
+
+    return _build_doc_response(doc)
+
+
+@router.get("/{employee_id}/documents", response_model=List[GCSDocumentResponse])
+async def list_gcs_documents(
+    employee_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    token_data: dict = Depends(get_token_data),
+):
+    """List all GCS documents for an employee with fresh signed URLs."""
+    from models.auth import User
+
+    org_id = UUID(token_data.get("org_id"))
+
+    emp_result = await db.execute(select(Employee).where(Employee.id == employee_id, Employee.org_id == org_id))
+    if not emp_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Employee not found")
+
+    docs_result = await db.execute(
+        select(EmployeeDocument)
+        .where(EmployeeDocument.employee_id == employee_id, EmployeeDocument.org_id == org_id)
+        .where(EmployeeDocument.gcs_path.isnot(None))
+        .order_by(EmployeeDocument.created_at.desc())
+    )
+    docs = docs_result.scalars().all()
+
+    uploader_ids = {d.uploaded_by for d in docs if d.uploaded_by}
+    name_map: dict = {}
+    if uploader_ids:
+        users_result = await db.execute(select(User).where(User.id.in_(uploader_ids)))
+        for u in users_result.scalars().all():
+            name_map[u.id] = f"{u.first_name} {u.last_name}".strip()
+
+    return [_build_doc_response(d, name_map.get(d.uploaded_by)) for d in docs]
+
+
+@router.get("/{employee_id}/documents/{doc_id}", response_model=GCSDocumentResponse)
+async def get_gcs_document(
+    employee_id: UUID,
+    doc_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    token_data: dict = Depends(get_token_data),
+):
+    """Get a single document with fresh signed URLs."""
+    from models.auth import User
+
+    org_id = UUID(token_data.get("org_id"))
+
+    result = await db.execute(
+        select(EmployeeDocument).where(
+            EmployeeDocument.id == doc_id,
+            EmployeeDocument.employee_id == employee_id,
+            EmployeeDocument.org_id == org_id,
+        )
+    )
+    doc = result.scalar_one_or_none()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    uploader_name = None
+    if doc.uploaded_by:
+        u = (await db.execute(select(User).where(User.id == doc.uploaded_by))).scalar_one_or_none()
+        if u:
+            uploader_name = f"{u.first_name} {u.last_name}".strip()
+
+    return _build_doc_response(doc, uploader_name)
+
+
+@router.delete("/{employee_id}/documents/{doc_id}")
+async def delete_gcs_document(
+    employee_id: UUID,
+    doc_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    token_data: dict = Depends(get_token_data),
+):
+    """Delete a document from GCS and the database."""
+    from services.storage_service import storage_service
+
+    org_id = UUID(token_data.get("org_id"))
+
+    result = await db.execute(
+        select(EmployeeDocument).where(
+            EmployeeDocument.id == doc_id,
+            EmployeeDocument.employee_id == employee_id,
+            EmployeeDocument.org_id == org_id,
+        )
+    )
+    doc = result.scalar_one_or_none()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    if doc.gcs_path:
+        storage_service.delete_file(doc.gcs_path)
+
+    await db.delete(doc)
+    await db.commit()
+
+    return {"message": "Document deleted"}

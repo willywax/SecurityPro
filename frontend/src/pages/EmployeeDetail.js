@@ -10,13 +10,15 @@ import { Textarea } from '../components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Badge } from '../components/ui/badge';
 import { EmptyState } from '../components/ui/empty-state';
-import { AlertTriangle, ArrowLeft, Camera, CheckCircle, CreditCard, File, FileText, Heart, Loader2, Package, Plus, Save, Trash2, User, Users, X, XCircle } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Camera, CheckCircle, CreditCard, Download, Eye, File, FileText, Heart, Loader2, Package, Printer, Plus, Save, Trash2, Upload, User, Users, X, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import employeeService from '@/services/employeeService';
+import storageService from '@/services/storageService';
 import regionService from '@/services/regionService';
 import { API_BASE_URL } from '@/lib/api';
 import { formatTZS } from '@/utils/currency';
 import { formatApiError } from '@/utils/errors';
+import { formatFileSize } from '@/utils/fileSize';
 import { LabeledInputField, LabeledSelectField, LabeledTextareaField } from '@/components/forms/labeled-fields';
 import { ID_TYPE_OPTIONS, RELATIONSHIP_OPTIONS } from '@/constants/contactOptions';
 
@@ -97,6 +99,15 @@ const EmployeeDetail = () => {
   const [terminateSaving, setTerminateSaving] = useState(false);
   const [historyForm, setHistoryForm] = useState({ employer_name: '', job_title: '', start_date: '', end_date: '', reason_for_leaving: '', notes: '' });
   const [documentForm, setDocumentForm] = useState({ document_type: '', document_name: '', notes: '', file: null });
+  // GCS document state
+  const [docTypeFilter, setDocTypeFilter] = useState('all');
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploadForm, setUploadForm] = useState({ file: null, document_type: '', title: '', notes: '' });
+  const [uploadErrors, setUploadErrors] = useState({});
+  const [uploadProgress, setUploadProgress] = useState(false);
+  // GCS photo state
+  const [photoUrl, setPhotoUrl] = useState(null);
+  const [photoLoading, setPhotoLoading] = useState(false);
 
   const employeeQuery = useQuery({ queryKey: ['employee', id], queryFn: () => employeeService.getById(id) });
   const regionsQuery = useQuery({ queryKey: ['regions', 'employee-form'], queryFn: () => regionService.getAll({ status_filter: 'active' }) });
@@ -114,11 +125,19 @@ const EmployeeDetail = () => {
   const issuedAssetsQuery = useQuery({ queryKey: ['employee', id, 'issued-assets'], queryFn: () => employeeService.getIssuedAssets(id), enabled: !!id });
   const contractsQuery = useQuery({ queryKey: ['employee', id, 'contracts'], queryFn: () => employeeService.getContracts(id), enabled: !!id });
   const historyQuery = useQuery({ queryKey: ['employee', id, 'employment-history'], queryFn: () => employeeService.getEmploymentHistory(id), enabled: !!id });
-  const documentsQuery = useQuery({ queryKey: ['employee', id, 'documents'], queryFn: () => employeeService.getDocuments(id), enabled: !!id });
+  const documentsQuery = useQuery({
+    queryKey: ['employee', id, 'documents'],
+    queryFn: () => storageService.getEmployeeDocuments(id),
+    enabled: !!id,
+  });
 
   useEffect(() => {
     if (employeeQuery.data) {
       setForm(employeeQuery.data);
+      // Load GCS photo URL if employee has a photo_path
+      if (employeeQuery.data.photo_path && !photoUrl) {
+        storageService.getEmployeePhoto(id).then(r => setPhotoUrl(r.photo_url)).catch(() => {});
+      }
     }
   }, [employeeQuery.data]);
 
@@ -150,20 +169,28 @@ const EmployeeDetail = () => {
   });
 
   const uploadPhoto = useMutation({
-    mutationFn: (file) => employeeService.uploadPhoto(id, file),
+    mutationFn: (file) => storageService.uploadEmployeePhoto(id, file),
     onSuccess: (data) => {
-      queryClient.setQueryData(['employee', id], data);
+      setPhotoUrl(data.photo_url);
       refresh();
       toast.success('Photo uploaded');
     },
     onError: (error) => toast.error(formatApiError(error, 'Failed to upload photo')),
   });
 
+  const handleRefreshPhoto = async () => {
+    if (!employee?.photo_path) return;
+    try {
+      const r = await storageService.getEmployeePhoto(id);
+      if (r.photo_url) setPhotoUrl(r.photo_url);
+    } catch (_) {}
+  };
+
   const employee = employeeQuery.data;
   if (employeeQuery.isLoading || !form) return <div className="flex items-center justify-center py-24"><Loader2 className="w-8 h-8 animate-spin text-slate-400" /></div>;
   if (employeeQuery.isError) return <Card><CardContent className="py-12 text-center text-red-600">{formatApiError(employeeQuery.error, 'Failed to load employee')}</CardContent></Card>;
 
-  const avatarSrc = employee.profile_photo ? `${API_BASE_URL}${employee.profile_photo}` : null;
+  const avatarSrc = photoUrl || (employee.profile_photo ? `${API_BASE_URL}${employee.profile_photo}` : null);
   const removeItem = async (promise, section, message) => {
     try {
       await promise;
@@ -338,11 +365,32 @@ const EmployeeDetail = () => {
           <Link to="/employees"><Button variant="ghost" size="icon"><ArrowLeft className="w-5 h-5" /></Button></Link>
           <div className="flex items-center gap-4">
             <div className="relative group">
-              {avatarSrc ? <img src={avatarSrc} alt={employee.full_name} className="w-16 h-16 rounded-full object-cover border-2 border-slate-200" /> : <div className="w-16 h-16 rounded-full bg-slate-700 flex items-center justify-center text-white text-xl font-semibold">{employee.full_name.slice(0, 1)}</div>}
-              <button onClick={() => fileInputRef.current?.click()} className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                <Camera className="w-4 h-4 text-white" />
-              </button>
-              <input ref={fileInputRef} type="file" accept="image/jpeg,image/png" className="hidden" onChange={(event) => event.target.files?.[0] && uploadPhoto.mutate(event.target.files[0])} />
+              {avatarSrc ? (
+                <img
+                  src={avatarSrc}
+                  alt={employee.full_name}
+                  className="w-16 h-16 rounded-full object-cover border-2 border-slate-200"
+                  onError={handleRefreshPhoto}
+                />
+              ) : (
+                <div
+                  className="w-16 h-16 rounded-full flex items-center justify-center text-white text-xl font-semibold select-none"
+                  style={{ backgroundColor: `hsl(${[...employee.full_name].reduce((a, c) => a + c.charCodeAt(0), 0) % 360}, 55%, 42%)` }}
+                >
+                  {employee.first_name?.[0]}{employee.last_name?.[0]}
+                </div>
+              )}
+              {uploadPhoto.isPending && (
+                <div className="absolute inset-0 rounded-full bg-black/60 flex items-center justify-center">
+                  <Loader2 className="w-5 h-5 text-white animate-spin" />
+                </div>
+              )}
+              {!uploadPhoto.isPending && (
+                <button onClick={() => fileInputRef.current?.click()} className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                  <Camera className="w-4 h-4 text-white" />
+                </button>
+              )}
+              <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(event) => event.target.files?.[0] && uploadPhoto.mutate(event.target.files[0])} />
             </div>
             <div>
               <div className="flex items-center gap-3">
@@ -785,21 +833,251 @@ const EmployeeDetail = () => {
         </TabsContent>
 
         <TabsContent value="documents" className="mt-6">
-          <Card className="mb-4">
-            <CardHeader><CardTitle className="text-lg">Upload Document</CardTitle></CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Input placeholder="Document type" value={documentForm.document_type} onChange={(event) => setDocumentForm((current) => ({ ...current, document_type: event.target.value }))} />
-              <Input placeholder="Document name" value={documentForm.document_name} onChange={(event) => setDocumentForm((current) => ({ ...current, document_name: event.target.value }))} />
-              <Textarea className="md:col-span-2" placeholder="Notes" value={documentForm.notes} onChange={(event) => setDocumentForm((current) => ({ ...current, notes: event.target.value }))} />
-              <Input className="md:col-span-2" type="file" onChange={(event) => setDocumentForm((current) => ({ ...current, file: event.target.files?.[0] || null }))} />
-              <div className="md:col-span-2 flex justify-end"><Button onClick={() => employeeService.uploadDocument(id, documentForm).then(() => { setDocumentForm({ document_type: '', document_name: '', notes: '', file: null }); refresh('documents'); toast.success('Document uploaded'); }).catch(error => toast.error(formatApiError(error, 'Failed to upload document')))} disabled={!documentForm.file}><Plus className="w-4 h-4 mr-2" />Upload</Button></div>
-            </CardContent>
-          </Card>
-          <Section loading={documentsQuery.isLoading} items={documentsQuery.data} emptyText="No documents" render={(item) => (
-            <Card key={item.id}><CardContent className="p-4 flex items-start justify-between"><div><p className="font-medium text-slate-900">{item.document_name}</p><p className="text-slate-500">{item.document_type}</p></div><Button variant="outline" size="sm" onClick={() => removeItem(employeeService.deleteDocument(id, item.id), 'documents', 'Document deleted')}><Trash2 className="w-4 h-4" /></Button></CardContent></Card>
-          )} />
+          {/* Documents header */}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <h3 className="text-lg font-semibold text-slate-900">Documents</h3>
+              {documentsQuery.data?.length > 0 && (
+                <span className="text-xs bg-slate-100 text-slate-600 rounded-full px-2 py-0.5 font-medium">{documentsQuery.data.length}</span>
+              )}
+            </div>
+            <Button className="bg-[#0F172A] hover:bg-slate-800" onClick={() => { setUploadForm({ file: null, document_type: '', title: '', notes: '' }); setUploadErrors({}); setShowUploadModal(true); }}>
+              <Upload className="w-4 h-4 mr-2" /> Upload Document
+            </Button>
+          </div>
+
+          {/* Document type filter tabs */}
+          <div className="flex flex-wrap gap-1 mb-4 border-b pb-3">
+            {[
+              { key: 'all', label: 'All' },
+              { key: 'national_id', label: 'National ID' },
+              { key: 'referee_id', label: 'Referee ID' },
+              { key: 'next_of_kin_id', label: 'Next of Kin' },
+              { key: 'contract', label: 'Contract' },
+              { key: 'certificate', label: 'Certificate' },
+              { key: 'disciplinary_letter', label: 'Disciplinary' },
+              { key: 'other', label: 'Other' },
+            ].map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setDocTypeFilter(key)}
+                className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${docTypeFilter === key ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Document list */}
+          {documentsQuery.isLoading ? (
+            <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-slate-400" /></div>
+          ) : documentsQuery.isError ? (
+            <Card><CardContent className="py-12 text-center text-red-600">Failed to load documents</CardContent></Card>
+          ) : (() => {
+            const docs = (documentsQuery.data || []).filter(d => docTypeFilter === 'all' || d.document_type === docTypeFilter);
+            if (docs.length === 0) return (
+              <Card><CardContent className="py-12 text-center">
+                <File className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                <p className="text-slate-500 mb-4">No documents uploaded yet</p>
+                <Button className="bg-[#0F172A] hover:bg-slate-800" onClick={() => { setUploadForm({ file: null, document_type: '', title: '', notes: '' }); setUploadErrors({}); setShowUploadModal(true); }}>
+                  <Upload className="w-4 h-4 mr-2" /> Upload Document
+                </Button>
+              </CardContent></Card>
+            );
+            const DOC_TYPE_LABELS = {
+              national_id: 'National ID', referee_id: 'Referee ID', next_of_kin_id: 'Next of Kin ID',
+              contract: 'Contract', certificate: 'Certificate', disciplinary_letter: 'Disciplinary Letter', other: 'Other',
+            };
+            const DOC_TYPE_COLORS = {
+              national_id: 'bg-blue-100 text-blue-700', referee_id: 'bg-purple-100 text-purple-700',
+              next_of_kin_id: 'bg-teal-100 text-teal-700', contract: 'bg-emerald-100 text-emerald-700',
+              certificate: 'bg-amber-100 text-amber-700', disciplinary_letter: 'bg-red-100 text-red-700',
+              other: 'bg-slate-100 text-slate-600',
+            };
+            return (
+              <div className="space-y-3">
+                {docs.map(doc => (
+                  <Card key={doc.id}>
+                    <CardContent className="p-4">
+                      <div className="flex flex-col sm:flex-row sm:items-start gap-3">
+                        {/* File icon */}
+                        <div className="p-2 bg-slate-50 rounded-lg shrink-0 self-start">
+                          {doc.mime_type === 'application/pdf'
+                            ? <FileText className="w-6 h-6 text-red-500" />
+                            : <File className="w-6 h-6 text-blue-500" />}
+                        </div>
+                        {/* Info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2 mb-1">
+                            <span className="font-medium text-slate-900">{doc.title || doc.original_filename || '—'}</span>
+                            <Badge className={`text-xs ${DOC_TYPE_COLORS[doc.document_type] || 'bg-slate-100 text-slate-600'}`}>
+                              {DOC_TYPE_LABELS[doc.document_type] || doc.document_type}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-slate-500 truncate">{doc.original_filename}</p>
+                          <p className="text-xs text-slate-400 mt-1">
+                            {formatFileSize(doc.file_size_bytes)}
+                            {doc.uploaded_by_name && ` · Uploaded by ${doc.uploaded_by_name}`}
+                            {doc.uploaded_at && ` · ${new Date(doc.uploaded_at).toLocaleDateString()}`}
+                          </p>
+                          {doc.notes && <p className="text-xs text-slate-500 italic mt-1">{doc.notes}</p>}
+                        </div>
+                        {/* Actions */}
+                        <div className="flex gap-1 shrink-0">
+                          {doc.view_url && (
+                            <>
+                              <Button size="sm" variant="outline" title="View" onClick={() => window.open(doc.view_url, '_blank')}>
+                                <Eye className="w-3 h-3" />
+                              </Button>
+                              <Button size="sm" variant="outline" title="Download" onClick={() => window.open(doc.download_url, '_blank')}>
+                                <Download className="w-3 h-3" />
+                              </Button>
+                              <Button size="sm" variant="outline" title="Print" onClick={() => { const w = window.open(doc.view_url, '_blank'); w?.addEventListener('load', () => w.print()); }}>
+                                <Printer className="w-3 h-3" />
+                              </Button>
+                            </>
+                          )}
+                          <Button
+                            size="sm" variant="ghost"
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50" title="Delete"
+                            onClick={async () => {
+                              if (!window.confirm(`Delete "${doc.title || doc.original_filename}"?`)) return;
+                              try {
+                                await storageService.deleteDocument(id, doc.id);
+                                refresh('documents');
+                                toast.success('Document deleted');
+                              } catch (err) {
+                                toast.error(formatApiError(err, 'Failed to delete document'));
+                              }
+                            }}
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            );
+          })()}
         </TabsContent>
       </Tabs>
+
+      {/* Upload Document Modal */}
+      {showUploadModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <h3 className="font-semibold text-slate-900">Upload Document</h3>
+              <button onClick={() => setShowUploadModal(false)}><X className="w-5 h-5 text-slate-400 hover:text-slate-700" /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              {/* File picker */}
+              <div>
+                <label className="text-sm font-medium text-slate-700 block mb-1">File *</label>
+                <div
+                  className={`border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors ${uploadForm.file ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200 hover:border-slate-400'} ${uploadErrors.file ? 'border-red-400' : ''}`}
+                  onClick={() => document.getElementById('doc-file-input').click()}
+                  onDragOver={e => e.preventDefault()}
+                  onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) setUploadForm(u => ({ ...u, file: f })); }}
+                >
+                  {uploadForm.file ? (
+                    <div className="flex items-center justify-center gap-2 text-emerald-700">
+                      <File className="w-4 h-4" />
+                      <span className="text-sm font-medium truncate max-w-xs">{uploadForm.file.name}</span>
+                      <span className="text-xs text-slate-500">({formatFileSize(uploadForm.file.size)})</span>
+                    </div>
+                  ) : (
+                    <>
+                      <Upload className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                      <p className="text-sm text-slate-500">Drag & drop or click to browse</p>
+                      <p className="text-xs text-slate-400 mt-1">PDF, JPG, PNG, WEBP — max 20 MB</p>
+                    </>
+                  )}
+                </div>
+                <input id="doc-file-input" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" className="hidden"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) setUploadForm(u => ({ ...u, file: f })); }} />
+                {uploadErrors.file && <p className="text-xs text-red-600 mt-1">{uploadErrors.file}</p>}
+              </div>
+
+              {/* Document type */}
+              <div>
+                <label className="text-sm font-medium text-slate-700 block mb-1">Document Type *</label>
+                <select
+                  value={uploadForm.document_type}
+                  onChange={e => setUploadForm(u => ({ ...u, document_type: e.target.value }))}
+                  className={`w-full border rounded-md px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 ${uploadErrors.document_type ? 'border-red-500' : 'border-slate-200'}`}
+                >
+                  <option value="">Select type...</option>
+                  <option value="national_id">National ID</option>
+                  <option value="referee_id">Referee ID Copy</option>
+                  <option value="next_of_kin_id">Next of Kin ID</option>
+                  <option value="contract">Contract Document</option>
+                  <option value="certificate">Certificate / Qualification</option>
+                  <option value="disciplinary_letter">Disciplinary Letter</option>
+                  <option value="other">Other</option>
+                </select>
+                {uploadErrors.document_type && <p className="text-xs text-red-600 mt-1">{uploadErrors.document_type}</p>}
+              </div>
+
+              {/* Title */}
+              <div>
+                <label className="text-sm font-medium text-slate-700 block mb-1">Title *</label>
+                <Input
+                  value={uploadForm.title}
+                  onChange={e => setUploadForm(u => ({ ...u, title: e.target.value }))}
+                  placeholder='e.g. "NIDA Card"'
+                  className={uploadErrors.title ? 'border-red-500' : ''}
+                />
+                {uploadErrors.title && <p className="text-xs text-red-600 mt-1">{uploadErrors.title}</p>}
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="text-sm font-medium text-slate-700 block mb-1">Notes</label>
+                <Input value={uploadForm.notes} onChange={e => setUploadForm(u => ({ ...u, notes: e.target.value }))} placeholder="Optional" />
+              </div>
+
+              {/* Progress bar */}
+              {uploadProgress && (
+                <div className="w-full bg-slate-100 rounded-full h-2">
+                  <div className="bg-slate-900 h-2 rounded-full animate-pulse w-3/4" />
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-2">
+                <Button
+                  className="bg-[#0F172A] hover:bg-slate-800"
+                  disabled={uploadProgress}
+                  onClick={async () => {
+                    const e = {};
+                    if (!uploadForm.file) e.file = 'Select a file';
+                    if (!uploadForm.document_type) e.document_type = 'Select a document type';
+                    if (!uploadForm.title.trim()) e.title = 'Title is required';
+                    if (Object.keys(e).length) { setUploadErrors(e); return; }
+                    setUploadProgress(true);
+                    try {
+                      await storageService.uploadDocument(id, uploadForm.file, uploadForm.document_type, uploadForm.title, uploadForm.notes || null);
+                      refresh('documents');
+                      toast.success('Document uploaded');
+                      setShowUploadModal(false);
+                    } catch (err) {
+                      toast.error(formatApiError(err, 'Upload failed'));
+                    } finally {
+                      setUploadProgress(false);
+                    }
+                  }}
+                >
+                  {uploadProgress ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Upload className="w-4 h-4 mr-2" />}
+                  Upload
+                </Button>
+                <Button variant="outline" onClick={() => setShowUploadModal(false)}>Cancel</Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -35,6 +35,7 @@ from routers import inventory
 from routers import issuances
 from routers import write_offs
 from routers import users
+from routers import files
 
 
 async def run_contract_expiry_check():
@@ -175,6 +176,7 @@ api_router.include_router(inventory.router)
 api_router.include_router(issuances.router)
 api_router.include_router(write_offs.router)
 api_router.include_router(users.router)
+api_router.include_router(files.router)
 
 # Include the router in the main app
 app.include_router(api_router)
