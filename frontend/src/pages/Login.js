@@ -44,7 +44,7 @@ const Login = () => {
             <div className="w-10 h-10 bg-[#0F172A] rounded-lg flex items-center justify-center">
               <Shield className="w-5 h-5 text-white" />
             </div>
-            <span className="text-xl font-bold tracking-tight text-slate-900">SecureOps</span>
+            <span className="text-xl font-bold tracking-tight text-slate-900">Lakezone Operation System</span>
           </div>
 
           {/* Header */}
@@ -173,10 +173,10 @@ const Login = () => {
         <div className="absolute bottom-12 left-12 right-12">
           <div className="bg-white/10 backdrop-blur-md rounded-xl p-6 border border-white/20">
             <p className="text-white text-lg font-medium mb-2">
-              "SecureOps transformed how we manage our security operations."
+              "Lakezone Operation System transformed how we manage our operations."
             </p>
             <p className="text-white/70 text-sm">
-              — Operations Director, Premier Security Services
+              - Operations Director, Lakezone
             </p>
           </div>
         </div>

@@ -59,7 +59,7 @@ python seed.py
 ```
 
 This creates:
-- Default organization: "SecureOps Demo"
+- Default organization: "Lakezone Operation System"
 - Admin user: admin@securityops.com / Admin123!
 
 ### Step 4: Start the Server

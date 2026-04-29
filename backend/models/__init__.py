@@ -1,4 +1,4 @@
-# Security Operations SaaS - MongoDB Models
+# Lakezone Operation System - MongoDB Models
 # All models include org_id for multi-tenant support
 
 from pydantic import BaseModel, Field, EmailStr, ConfigDict

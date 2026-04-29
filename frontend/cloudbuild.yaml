@@ -1,0 +1,11 @@
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args:
+  - 'build'
+  - '--build-arg'
+  - 'VITE_API_URL=${_VITE_API_URL}'
+  - '-t'
+  - 'gcr.io/$PROJECT_ID/securitypro-frontend:v5'
+  - '.'
+images:
+- 'gcr.io/$PROJECT_ID/securitypro-frontend:v5'

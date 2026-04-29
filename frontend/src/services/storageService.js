@@ -15,6 +15,11 @@ const storageService = {
     return response.data; // { photo_url }
   },
 
+  deleteEmployeePhoto: async (employeeId) => {
+    const response = await api.delete(`/employees/${employeeId}/photo`);
+    return response.data;
+  },
+
   getEmployeeDocuments: async (employeeId) => {
     const response = await api.get(`/employees/${employeeId}/documents`);
     return response.data; // array of GCSDocumentResponse

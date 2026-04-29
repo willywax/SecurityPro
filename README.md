@@ -87,7 +87,7 @@ After starting the backend, the database will be automatically seeded:
 
 - **Email**: admin@securityops.com
 - **Password**: Admin123!
-- **Organization**: SecureOps Demo
+- **Organization**: LZone Security
 
 ## API Endpoints
 

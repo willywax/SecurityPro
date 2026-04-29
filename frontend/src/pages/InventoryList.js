@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -12,6 +12,7 @@ import inventoryService from '@/services/inventoryService';
 import assetTypeService from '@/services/assetTypeService';
 
 const InventoryList = () => {
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -98,7 +99,7 @@ const InventoryList = () => {
             </TableHeader>
             <TableBody>
               {items.map(item => (
-                <TableRow key={item.id} className="cursor-pointer hover:bg-slate-50" onClick={() => window.location.href = `/inventory/${item.id}`}>
+                <TableRow key={item.id} className="cursor-pointer hover:bg-slate-50" onClick={() => navigate(`/inventory/${item.id}`)}>
                   <TableCell className="font-medium text-slate-900">{item.item_name}</TableCell>
                   <TableCell className="text-slate-600">{item.asset_type_name || '—'}</TableCell>
                   <TableCell className="text-right">

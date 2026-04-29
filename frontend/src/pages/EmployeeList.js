@@ -50,12 +50,14 @@ const EmployeeAvatar = ({ employee, size = 'md' }) => {
   const colors = ['bg-blue-500', 'bg-emerald-500', 'bg-amber-500', 'bg-rose-500', 'bg-cyan-500', 'bg-indigo-500'];
   const background = colors[(employee.first_name?.charCodeAt(0) || 0) % colors.length];
 
-  if (employee.profile_photo) {
-    const src = employee.profile_photo.startsWith('http')
-      ? employee.profile_photo
-      : `${API_BASE_URL}${employee.profile_photo}`;
+  const photoSrc = employee.photo_url || employee.profile_photo;
 
-    return <img src={src} alt={employee.full_name} className={`${sizeClasses[size]} rounded-full object-cover flex-shrink-0`} />;
+  if (photoSrc) {
+    const src = photoSrc.startsWith('http')
+      ? photoSrc
+      : `${API_BASE_URL}${photoSrc}`;
+
+    return <img src={src} alt={employee.full_name} className={`${sizeClasses[size]} rounded-full object-cover flex-shrink-0`} loading="lazy" />;
   }
 
   return (
@@ -71,8 +73,8 @@ const EmployeeList = () => {
   const [search, setSearch] = useState(searchParams.get('search') || '');
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all');
-  const [regionFilter, setRegionFilter] = useState('all');
-  const [zoneFilter, setZoneFilter] = useState('all');
+  const [regionFilter, setRegionFilter] = useState(searchParams.get('region') || 'all');
+  const [zoneFilter, setZoneFilter] = useState(searchParams.get('zone') || 'all');
   const [page, setPage] = useState(Number(searchParams.get('page') || 1));
 
   const zonesQuery = useQuery({ queryKey: ['zones', 'filter'], queryFn: () => zoneService.getAll() });
@@ -93,12 +95,14 @@ const EmployeeList = () => {
     const params = new URLSearchParams();
     if (search) params.set('search', search);
     if (statusFilter !== 'all') params.set('status', statusFilter);
+    if (zoneFilter !== 'all') params.set('zone', zoneFilter);
+    if (regionFilter !== 'all') params.set('region', regionFilter);
     if (page > 1) params.set('page', String(page));
     setSearchParams(params);
-  }, [page, search, setSearchParams, statusFilter]);
+  }, [page, regionFilter, search, setSearchParams, statusFilter, zoneFilter]);
 
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ['employees', { page, pageSize, search: debouncedSearch, statusFilter }],
+    queryKey: ['employees', { page, pageSize, search: debouncedSearch, statusFilter, regionFilter, zoneFilter }],
     queryFn: () =>
       employeeService.getAll({
         page,
@@ -106,6 +110,7 @@ const EmployeeList = () => {
         search: debouncedSearch || undefined,
         status_filter: statusFilter !== 'all' ? statusFilter : undefined,
         region_id: regionFilter !== 'all' ? regionFilter : undefined,
+        zone_id: regionFilter === 'all' && zoneFilter !== 'all' ? zoneFilter : undefined,
       }),
   });
 
@@ -191,11 +196,11 @@ const EmployeeList = () => {
             <User className="w-12 h-12 text-slate-300 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-slate-900 mb-1">No employees found</h3>
             <p className="text-slate-500 text-sm mb-4">
-              {search || statusFilter !== 'all'
+              {search || statusFilter !== 'all' || zoneFilter !== 'all' || regionFilter !== 'all'
                 ? 'Try adjusting your search or filters'
                 : 'Get started by adding your first employee'}
             </p>
-            {!search && statusFilter === 'all' && (
+            {!search && statusFilter === 'all' && zoneFilter === 'all' && regionFilter === 'all' && (
               <Link to="/employees/new">
                 <Button className="bg-[#0F172A] hover:bg-slate-800">
                   <Plus className="w-4 h-4 mr-2" />

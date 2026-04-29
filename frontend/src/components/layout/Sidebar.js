@@ -78,9 +78,7 @@ const Sidebar = ({ onClose }) => {
               <Shield className="w-4 h-4 text-white" />
             </div>
           )}
-          <span className="text-white font-semibold text-sm truncate">
-            {organization?.name || 'SecureOps'}
-          </span>
+          <span className="text-white font-semibold text-sm truncate">Opsys</span>
         </div>
       </div>
 

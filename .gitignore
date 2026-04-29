@@ -82,9 +82,10 @@ android-sdk/ -e
 *.env
 *.env.*
 frontend/node_modules/.cache/default-development/0.pack
-# GCS service account key (never commit)
+# Service account keys (never commit)
 backend/gcs-key.json
 gcs-key.json
+cicd-key.json
 -e 
 # Environment files
 *.env

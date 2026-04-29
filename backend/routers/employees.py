@@ -116,6 +116,7 @@ class EmployeeResponse(BaseModel):
     guard_no: Optional[str] = None
     profile_photo: Optional[str] = None
     photo_path: Optional[str] = None
+    photo_url: Optional[str] = None
     first_name: str
     middle_name: Optional[str] = None
     last_name: str
@@ -394,20 +395,53 @@ async def generate_guard_no(db: AsyncSession, org_id: UUID) -> str:
 
 async def build_employee_response(employee: Employee, db: AsyncSession) -> dict:
     """Enrich an employee with region and zone labels for API responses."""
+    responses = await build_employee_responses([employee], db)
+    return responses[0]
+
+
+async def build_employee_responses(employees: list[Employee], db: AsyncSession) -> list[dict]:
+    """Enrich employees with region and zone labels using batched lookups."""
     from models.zone import Region, Zone
 
+    region_ids = {employee.region_id for employee in employees if employee.region_id}
+    regions_by_id = {}
+    zones_by_id = {}
+
+    if region_ids:
+        regions_result = await db.execute(select(Region).where(Region.id.in_(region_ids)))
+        regions = regions_result.scalars().all()
+        regions_by_id = {region.id: region for region in regions}
+
+        zone_ids = {region.zone_id for region in regions if region.zone_id}
+        if zone_ids:
+            zones_result = await db.execute(select(Zone).where(Zone.id.in_(zone_ids)))
+            zones_by_id = {zone.id: zone for zone in zones_result.scalars().all()}
+
+    responses = []
+    for employee in employees:
+        responses.append(build_employee_response_from_maps(employee, regions_by_id, zones_by_id))
+    return responses
+
+
+def build_employee_response_from_maps(employee: Employee, regions_by_id: dict, zones_by_id: dict) -> dict:
+    """Build an employee response from already-loaded region and zone maps."""
     emp_dict = {c.key: getattr(employee, c.key) for c in employee.__table__.columns}
     emp_dict["region_name"] = None
     emp_dict["zone_name"] = None
+    emp_dict["photo_url"] = None
 
-    if employee.region_id:
-        region_result = await db.execute(select(Region).where(Region.id == employee.region_id))
-        region = region_result.scalar_one_or_none()
-        if region:
-            emp_dict["region_name"] = region.region_name
-            zone_result = await db.execute(select(Zone).where(Zone.id == region.zone_id))
-            zone = zone_result.scalar_one_or_none()
-            emp_dict["zone_name"] = zone.zone_name if zone else None
+    if employee.photo_path:
+        try:
+            from services.storage_service import storage_service
+            emp_dict["photo_url"] = storage_service.get_public_url(employee.photo_path)
+        except Exception:
+            emp_dict["photo_url"] = None
+
+    region = regions_by_id.get(employee.region_id)
+    if region:
+        emp_dict["region_name"] = region.region_name
+        zone = zones_by_id.get(region.zone_id)
+        emp_dict["zone_name"] = zone.zone_name if zone else None
 
     return emp_dict
 
@@ -509,10 +543,13 @@ async def get_employees(
     search: Optional[str] = None,
     status_filter: Optional[EmploymentStatus] = None,
     region_id: Optional[UUID] = None,
+    zone_id: Optional[UUID] = None,
     db: AsyncSession = Depends(get_db),
     token_data: dict = Depends(get_token_data)
 ):
     """Get all employees with pagination and filters"""
+    from models.zone import Region
+
     org_id = UUID(token_data.get("org_id"))
 
     # Base query
@@ -533,6 +570,9 @@ async def get_employees(
         query = query.where(Employee.employment_status == status_filter)
     if region_id:
         query = query.where(Employee.region_id == region_id)
+    elif zone_id:
+        region_ids = select(Region.id).where(Region.zone_id == zone_id, Region.org_id == org_id)
+        query = query.where(Employee.region_id.in_(region_ids))
 
     # Count total
     count_query = select(func.count()).select_from(query.subquery())
@@ -546,10 +586,8 @@ async def get_employees(
     result = await db.execute(query)
     employees = result.scalars().all()
 
-    # Enrich with region/zone names
-    enriched = []
-    for emp in employees:
-        enriched.append(await build_employee_response(emp, db))
+    # Enrich with region/zone names without N+1 lookups.
+    enriched = await build_employee_responses(employees, db)
 
     return EmployeeListResponse(
         employees=enriched,
@@ -1378,12 +1416,13 @@ async def upload_gcs_photo(
         entity_id=str(employee_id),
         original_filename=file.filename or "profile.jpg",
         content_type=file.content_type,
+        cache_control="public, max-age=31536000, immutable",
     )
 
     employee.photo_path = gcs_path
     await db.commit()
 
-    photo_url = storage_service.get_signed_url(gcs_path, expiry_minutes=60)
+    photo_url = storage_service.get_public_url(gcs_path) or storage_service.get_signed_url(gcs_path, expiry_minutes=60)
     return {"photo_url": photo_url, "gcs_path": gcs_path}
 
 
@@ -1407,10 +1446,41 @@ async def get_gcs_photo(
         return {"photo_url": None}
 
     try:
-        photo_url = storage_service.get_signed_url(employee.photo_path, expiry_minutes=60)
-        return {"photo_url": photo_url}
+        photo_url = storage_service.get_public_url(employee.photo_path) or storage_service.get_signed_url(employee.photo_path, expiry_minutes=60)
+        return {"photo_url": photo_url, "gcs_path": employee.photo_path}
     except Exception:
         return {"photo_url": None}
+
+
+@router.delete("/{employee_id}/photo")
+async def delete_gcs_photo(
+    employee_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    token_data: dict = Depends(get_token_data),
+):
+    """Remove the employee's current profile photo from GCS."""
+    from services.storage_service import storage_service
+
+    org_id = UUID(token_data.get("org_id"))
+
+    result = await db.execute(select(Employee).where(Employee.id == employee_id, Employee.org_id == org_id))
+    employee = result.scalar_one_or_none()
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+
+    if employee.photo_path:
+        storage_service.delete_file(employee.photo_path)
+        employee.photo_path = None
+
+    if employee.profile_photo and os.path.exists(employee.profile_photo):
+        try:
+            os.remove(employee.profile_photo)
+        except OSError:
+            pass
+    employee.profile_photo = None
+
+    await db.commit()
+    return {"message": "Photo removed"}
 
 
 @router.post("/{employee_id}/documents", response_model=GCSDocumentResponse, status_code=201)

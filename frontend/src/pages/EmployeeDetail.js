@@ -31,6 +31,7 @@ const statusColors = {
 
 const formatDate = (value) => (value ? new Date(value).toLocaleDateString() : '-');
 const TANZANIA_PHONE_REGEX = /^(\+255|0)[67]\d{8}$/;
+const NO_REGION_VALUE = 'no_region';
 const DEFAULT_REFEREE_FORM = { full_name: '', referee_relationship: '', phone_number: '', alternate_phone: '', id_type: '', id_number: '', occupation: '', address: '', notes: '' };
 const DEFAULT_KIN_FORM = { full_name: '', kin_relationship: '', phone_1: '', phone_2: '', id_type: '', id_number: '', occupation: '', address: '', notes: '' };
 const RELATIONSHIP_LABELS = Object.fromEntries(RELATIONSHIP_OPTIONS.map((option) => [option.value, option.label]));
@@ -108,6 +109,7 @@ const EmployeeDetail = () => {
   // GCS photo state
   const [photoUrl, setPhotoUrl] = useState(null);
   const [photoLoading, setPhotoLoading] = useState(false);
+  const [showPhotoModal, setShowPhotoModal] = useState(false);
 
   const employeeQuery = useQuery({ queryKey: ['employee', id], queryFn: () => employeeService.getById(id) });
   const regionsQuery = useQuery({ queryKey: ['regions', 'employee-form'], queryFn: () => regionService.getAll({ status_filter: 'active' }) });
@@ -133,12 +135,23 @@ const EmployeeDetail = () => {
 
   useEffect(() => {
     if (employeeQuery.data) {
-      setForm(employeeQuery.data);
+      if (!editing) {
+        setForm(employeeQuery.data);
+      }
+      if (employeeQuery.data.photo_url) {
+        setPhotoUrl(employeeQuery.data.photo_url);
+        return;
+      }
       // Load GCS photo URL if employee has a photo_path
       if (employeeQuery.data.photo_path && !photoUrl) {
-        storageService.getEmployeePhoto(id).then(r => setPhotoUrl(r.photo_url)).catch(() => {});
+        setPhotoLoading(true);
+        storageService.getEmployeePhoto(id)
+          .then(r => setPhotoUrl(r.photo_url))
+          .catch(() => {})
+          .finally(() => setPhotoLoading(false));
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [employeeQuery.data]);
 
   const refresh = (section) => {
@@ -178,12 +191,27 @@ const EmployeeDetail = () => {
     onError: (error) => toast.error(formatApiError(error, 'Failed to upload photo')),
   });
 
+  const deletePhoto = useMutation({
+    mutationFn: () => storageService.deleteEmployeePhoto(id),
+    onSuccess: () => {
+      setPhotoUrl(null);
+      setShowPhotoModal(false);
+      refresh();
+      toast.success('Photo removed');
+    },
+    onError: (error) => toast.error(formatApiError(error, 'Failed to remove photo')),
+  });
+
   const handleRefreshPhoto = async () => {
     if (!employee?.photo_path) return;
     try {
+      setPhotoLoading(true);
       const r = await storageService.getEmployeePhoto(id);
       if (r.photo_url) setPhotoUrl(r.photo_url);
-    } catch (_) {}
+    } catch (_) {
+    } finally {
+      setPhotoLoading(false);
+    }
   };
 
   const employee = employeeQuery.data;
@@ -366,31 +394,45 @@ const EmployeeDetail = () => {
           <div className="flex items-center gap-4">
             <div className="relative group">
               {avatarSrc ? (
-                <img
-                  src={avatarSrc}
-                  alt={employee.full_name}
-                  className="w-16 h-16 rounded-full object-cover border-2 border-slate-200"
-                  onError={handleRefreshPhoto}
-                />
+                <button type="button" onClick={() => setShowPhotoModal(true)} className="block rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 focus:ring-offset-2">
+                  <img
+                    src={avatarSrc}
+                    alt={employee.full_name}
+                    className="w-28 h-28 rounded-lg object-cover border border-slate-200 bg-slate-50"
+                    onError={handleRefreshPhoto}
+                  />
+                </button>
               ) : (
-                <div
-                  className="w-16 h-16 rounded-full flex items-center justify-center text-white text-xl font-semibold select-none"
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-28 h-28 rounded-lg flex items-center justify-center text-white text-3xl font-semibold select-none focus:outline-none focus:ring-2 focus:ring-slate-900 focus:ring-offset-2"
                   style={{ backgroundColor: `hsl(${[...employee.full_name].reduce((a, c) => a + c.charCodeAt(0), 0) % 360}, 55%, 42%)` }}
                 >
                   {employee.first_name?.[0]}{employee.last_name?.[0]}
-                </div>
+                </button>
               )}
-              {uploadPhoto.isPending && (
-                <div className="absolute inset-0 rounded-full bg-black/60 flex items-center justify-center">
+              {(uploadPhoto.isPending || photoLoading) && (
+                <div className="absolute inset-0 rounded-lg bg-black/60 flex items-center justify-center">
                   <Loader2 className="w-5 h-5 text-white animate-spin" />
                 </div>
               )}
-              {!uploadPhoto.isPending && (
-                <button onClick={() => fileInputRef.current?.click()} className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+              {!uploadPhoto.isPending && !photoLoading && (
+                <button type="button" onClick={() => fileInputRef.current?.click()} className="absolute bottom-2 right-2 h-9 w-9 rounded-md bg-black/70 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-white">
                   <Camera className="w-4 h-4 text-white" />
                 </button>
               )}
-              <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(event) => event.target.files?.[0] && uploadPhoto.mutate(event.target.files[0])} />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) uploadPhoto.mutate(file);
+                  event.target.value = '';
+                }}
+              />
             </div>
             <div>
               <div className="flex items-center gap-3">
@@ -409,7 +451,7 @@ const EmployeeDetail = () => {
             </>
           ) : (
             <>
-              <Button variant="outline" onClick={() => setEditing(true)}>Edit</Button>
+              <Button variant="outline" onClick={() => { setForm(employee); setEditing(true); }}>Edit</Button>
               <Button variant="outline" className="text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => deleteMutation.mutate()}><Trash2 className="w-4 h-4 mr-2" />Delete</Button>
             </>
           )}
@@ -441,10 +483,10 @@ const EmployeeDetail = () => {
               <div className="space-y-2">
                 <Label>Region</Label>
                 {editing ? (
-                  <Select value={form.region_id || ''} onValueChange={(value) => setForm((current) => ({ ...current, region_id: value || null }))}>
+                  <Select value={form.region_id || NO_REGION_VALUE} onValueChange={(value) => setForm((current) => ({ ...current, region_id: value === NO_REGION_VALUE ? null : value }))}>
                     <SelectTrigger disabled={regionsQuery.isLoading || regionsQuery.isError || regions.length === 0}><SelectValue placeholder={regionPlaceholder} /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">No region</SelectItem>
+                      <SelectItem value={NO_REGION_VALUE}>No region</SelectItem>
                       {regions.map((r) => <SelectItem key={r.id} value={r.id}>{r.region_name} ({r.zone_name})</SelectItem>)}
                     </SelectContent>
                   </Select>
@@ -463,7 +505,7 @@ const EmployeeDetail = () => {
         </TabsContent>
 
         <TabsContent value="history" className="mt-6">
-          <Card className="mb-4">
+          {editing && <Card className="mb-4">
             <CardHeader><CardTitle className="text-lg">Add History</CardTitle></CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Input placeholder="Employer" value={historyForm.employer_name} onChange={(event) => setHistoryForm((current) => ({ ...current, employer_name: event.target.value }))} />
@@ -473,14 +515,14 @@ const EmployeeDetail = () => {
               <Textarea className="md:col-span-2" placeholder="Notes" value={historyForm.notes} onChange={(event) => setHistoryForm((current) => ({ ...current, notes: event.target.value }))} />
               <div className="md:col-span-2 flex justify-end"><Button onClick={() => employeeService.addEmploymentHistory(id, historyForm).then(() => { setHistoryForm({ employer_name: '', job_title: '', start_date: '', end_date: '', reason_for_leaving: '', notes: '' }); refresh('employment-history'); toast.success('History added'); }).catch(error => toast.error(formatApiError(error, 'Failed to add history')))}><Plus className="w-4 h-4 mr-2" />Add</Button></div>
             </CardContent>
-          </Card>
+          </Card>}
           <Section loading={historyQuery.isLoading} items={historyQuery.data} emptyText="No employment history" render={(item) => (
-            <Card key={item.id}><CardContent className="p-4 flex items-start justify-between"><div><p className="font-medium text-slate-900">{item.position}</p><p className="text-slate-500">{item.employer}</p></div><Button variant="outline" size="sm" onClick={() => removeItem(employeeService.deleteEmploymentHistory(id, item.id), 'employment-history', 'History deleted')}><Trash2 className="w-4 h-4" /></Button></CardContent></Card>
+            <Card key={item.id}><CardContent className="p-4 flex items-start justify-between"><div><p className="font-medium text-slate-900">{item.position}</p><p className="text-slate-500">{item.employer}</p></div>{editing && <Button variant="outline" size="sm" onClick={() => removeItem(employeeService.deleteEmploymentHistory(id, item.id), 'employment-history', 'History deleted')}><Trash2 className="w-4 h-4" /></Button>}</CardContent></Card>
           )} />
         </TabsContent>
 
         <TabsContent value="bank" className="mt-6">
-          <Card className="mb-4">
+          {editing && <Card className="mb-4">
             <CardHeader><CardTitle className="text-lg">Add Bank Account</CardTitle></CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Input placeholder="Bank name" value={bankForm.bank_name} onChange={(event) => setBankForm((current) => ({ ...current, bank_name: event.target.value }))} />
@@ -489,14 +531,14 @@ const EmployeeDetail = () => {
               <Input placeholder="Account number" value={bankForm.account_number} onChange={(event) => setBankForm((current) => ({ ...current, account_number: event.target.value }))} />
               <div className="md:col-span-2 flex justify-end"><Button onClick={() => employeeService.addBankAccount(id, bankForm).then(() => { setBankForm({ bank_name: '', bank_branch: '', account_name: '', account_number: '' }); refresh('bank-accounts'); toast.success('Bank account added'); }).catch(error => toast.error(formatApiError(error, 'Failed to add bank account')))}><Plus className="w-4 h-4 mr-2" />Add</Button></div>
             </CardContent>
-          </Card>
+          </Card>}
           <Section loading={bankQuery.isLoading} items={bankQuery.data} emptyText="No bank accounts" render={(item) => (
-            <Card key={item.id}><CardContent className="p-4 flex items-start justify-between"><div><p className="font-medium text-slate-900">{item.bank_name}</p><p className="text-slate-500">{item.account_name} · {item.account_number}</p></div><Button variant="outline" size="sm" onClick={() => removeItem(employeeService.deleteBankAccount(id, item.id), 'bank-accounts', 'Bank account deleted')}><Trash2 className="w-4 h-4" /></Button></CardContent></Card>
+            <Card key={item.id}><CardContent className="p-4 flex items-start justify-between"><div><p className="font-medium text-slate-900">{item.bank_name}</p><p className="text-slate-500">{item.account_name} · {item.account_number}</p></div>{editing && <Button variant="outline" size="sm" onClick={() => removeItem(employeeService.deleteBankAccount(id, item.id), 'bank-accounts', 'Bank account deleted')}><Trash2 className="w-4 h-4" /></Button>}</CardContent></Card>
           )} />
         </TabsContent>
 
         <TabsContent value="referees" className="mt-6">
-          <Card className="mb-4">
+          {editing && <Card className="mb-4">
             <CardHeader><CardTitle className="text-lg">Add Referee</CardTitle></CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <LabeledInputField id="referee-full-name" label="Full Name" value={refereeForm.full_name} onChange={(value) => updateRefereeField('full_name', value)} placeholder="Enter full name" error={refereeErrors.full_name} required />
@@ -510,14 +552,14 @@ const EmployeeDetail = () => {
               <LabeledTextareaField id="referee-notes" label="Notes" value={refereeForm.notes} onChange={(value) => updateRefereeField('notes', value)} placeholder="Optional notes" className="md:col-span-2" rows={3} />
               <div className="md:col-span-2 flex justify-end"><Button onClick={submitReferee}><Plus className="w-4 h-4 mr-2" />Add</Button></div>
             </CardContent>
-          </Card>
+          </Card>}
           <Section loading={refereesQuery.isLoading} items={refereesQuery.data} emptyText="No referees" render={(item) => (
-            <Card key={item.id}><CardContent className="p-4 flex items-start justify-between gap-4"><div><p className="font-medium text-slate-900">{item.full_name}</p><p className="text-slate-500">{RELATIONSHIP_LABELS[item.referee_relationship] || item.referee_relationship} · {item.phone_number}</p><p className="text-sm text-slate-500">{ID_TYPE_LABELS[item.id_type] || item.id_type} · {item.id_number}</p><p className="text-sm text-slate-500">{item.occupation} · {item.address}</p></div><Button variant="outline" size="sm" onClick={() => removeItem(employeeService.deleteReferee(id, item.id), 'referees', 'Referee deleted')}><Trash2 className="w-4 h-4" /></Button></CardContent></Card>
+            <Card key={item.id}><CardContent className="p-4 flex items-start justify-between gap-4"><div><p className="font-medium text-slate-900">{item.full_name}</p><p className="text-slate-500">{RELATIONSHIP_LABELS[item.referee_relationship] || item.referee_relationship} · {item.phone_number}</p><p className="text-sm text-slate-500">{ID_TYPE_LABELS[item.id_type] || item.id_type} · {item.id_number}</p><p className="text-sm text-slate-500">{item.occupation} · {item.address}</p></div>{editing && <Button variant="outline" size="sm" onClick={() => removeItem(employeeService.deleteReferee(id, item.id), 'referees', 'Referee deleted')}><Trash2 className="w-4 h-4" /></Button>}</CardContent></Card>
           )} />
         </TabsContent>
 
         <TabsContent value="nextofkin" className="mt-6">
-          <Card className="mb-4">
+          {editing && <Card className="mb-4">
             <CardHeader><CardTitle className="text-lg">Add Next of Kin</CardTitle></CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <LabeledInputField id="kin-full-name" label="Full Name" value={kinForm.full_name} onChange={(value) => updateKinField('full_name', value)} placeholder="Enter full name" error={kinErrors.full_name} required />
@@ -531,9 +573,9 @@ const EmployeeDetail = () => {
               <LabeledTextareaField id="kin-notes" label="Notes" value={kinForm.notes} onChange={(value) => updateKinField('notes', value)} placeholder="Optional notes" className="md:col-span-2" rows={3} />
               <div className="md:col-span-2 flex justify-end"><Button onClick={submitNextOfKin}><Plus className="w-4 h-4 mr-2" />Add</Button></div>
             </CardContent>
-          </Card>
+          </Card>}
           <Section loading={kinQuery.isLoading} items={kinQuery.data} emptyText="No next of kin" render={(item) => (
-            <Card key={item.id}><CardContent className="p-4 flex items-start justify-between gap-4"><div><p className="font-medium text-slate-900">{item.full_name}</p><p className="text-slate-500">{RELATIONSHIP_LABELS[item.kin_relationship] || item.kin_relationship} · {item.phone_1}</p><p className="text-sm text-slate-500">{ID_TYPE_LABELS[item.id_type] || item.id_type} · {item.id_number}</p><p className="text-sm text-slate-500">{item.occupation || '-'} · {item.address}</p></div><Button variant="outline" size="sm" onClick={() => removeItem(employeeService.deleteNextOfKin(id, item.id), 'next-of-kin', 'Next of kin deleted')}><Trash2 className="w-4 h-4" /></Button></CardContent></Card>
+            <Card key={item.id}><CardContent className="p-4 flex items-start justify-between gap-4"><div><p className="font-medium text-slate-900">{item.full_name}</p><p className="text-slate-500">{RELATIONSHIP_LABELS[item.kin_relationship] || item.kin_relationship} · {item.phone_1}</p><p className="text-sm text-slate-500">{ID_TYPE_LABELS[item.id_type] || item.id_type} · {item.id_number}</p><p className="text-sm text-slate-500">{item.occupation || '-'} · {item.address}</p></div>{editing && <Button variant="outline" size="sm" onClick={() => removeItem(employeeService.deleteNextOfKin(id, item.id), 'next-of-kin', 'Next of kin deleted')}><Trash2 className="w-4 h-4" /></Button>}</CardContent></Card>
           )} />
         </TabsContent>
 
@@ -963,6 +1005,45 @@ const EmployeeDetail = () => {
           })()}
         </TabsContent>
       </Tabs>
+
+      {showPhotoModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 py-6" onClick={() => setShowPhotoModal(false)}>
+          <div className="w-full max-w-3xl rounded-lg bg-white shadow-xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-center justify-between border-b px-4 py-3">
+              <h3 className="font-semibold text-slate-900">Profile Photo</h3>
+              <button type="button" onClick={() => setShowPhotoModal(false)} className="rounded-md p-1 text-slate-400 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4">
+              {avatarSrc ? (
+                <div className="mx-auto aspect-square w-full max-w-xl overflow-hidden rounded-lg bg-slate-100">
+                  <img src={avatarSrc} alt={employee.full_name} className="h-full w-full object-contain" onError={handleRefreshPhoto} />
+                </div>
+              ) : (
+                <div
+                  className="mx-auto flex aspect-square w-full max-w-xl items-center justify-center rounded-lg text-6xl font-semibold text-white"
+                  style={{ backgroundColor: `hsl(${[...employee.full_name].reduce((a, c) => a + c.charCodeAt(0), 0) % 360}, 55%, 42%)` }}
+                >
+                  {employee.first_name?.[0]}{employee.last_name?.[0]}
+                </div>
+              )}
+            </div>
+            <div className="flex flex-col-reverse gap-2 border-t px-4 py-3 sm:flex-row sm:justify-end">
+              <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={uploadPhoto.isPending || deletePhoto.isPending}>
+                {uploadPhoto.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
+                {avatarSrc ? 'Upload Another' : 'Upload Photo'}
+              </Button>
+              {avatarSrc && (
+                <Button variant="outline" className="text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => deletePhoto.mutate()} disabled={uploadPhoto.isPending || deletePhoto.isPending}>
+                  {deletePhoto.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}
+                  Remove
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Upload Document Modal */}
       {showUploadModal && (

@@ -148,7 +148,7 @@ const printInvoice = (invoice, org) => {
   <!-- Header -->
   <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;padding-bottom:24px;border-bottom:2px solid #0f172a;">
     <div>
-      <div style="font-size:22px;font-weight:800;color:#0f172a;letter-spacing:-0.5px;">${org?.name || 'SecureOps'}</div>
+      <div style="font-size:22px;font-weight:800;color:#0f172a;letter-spacing:-0.5px;">${org?.name || 'Lakezone Operation System'}</div>
       ${org?.address ? `<div style="font-size:12px;color:#64748b;margin-top:4px;">${org.address}</div>` : ''}
       ${org?.phone ? `<div style="font-size:12px;color:#64748b;">${org.phone}</div>` : ''}
       ${org?.email ? `<div style="font-size:12px;color:#64748b;">${org.email}</div>` : ''}

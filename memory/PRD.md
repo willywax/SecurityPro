@@ -162,7 +162,7 @@ Build a multi-tenant SaaS monorepo called "Security Operations SaaS" for securit
 ## Default Credentials
 - Email: admin@securityops.com
 - Password: Admin123!
-- Organization: SecureOps Demo
+- Organization: LZone Security
 
 ## Tech Stack
 - **Backend**: FastAPI, Motor (async MongoDB), Pydantic, JWT

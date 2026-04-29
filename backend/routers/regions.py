@@ -171,6 +171,56 @@ async def _build_region_response(region: Region, db: AsyncSession, include_lists
     }
 
 
+async def _build_region_list_responses(regions: list[Region], db: AsyncSession) -> list[dict]:
+    """Build region list responses with batched zone and count lookups."""
+    if not regions:
+        return []
+
+    region_ids = [region.id for region in regions]
+    zone_ids = {region.zone_id for region in regions if region.zone_id}
+
+    zones_by_id = {}
+    if zone_ids:
+        zone_result = await db.execute(select(Zone).where(Zone.id.in_(zone_ids)))
+        zones_by_id = {zone.id: zone for zone in zone_result.scalars().all()}
+
+    employee_counts = {}
+    emp_count_result = await db.execute(
+        select(Employee.region_id, func.count(Employee.id))
+        .where(Employee.region_id.in_(region_ids))
+        .group_by(Employee.region_id)
+    )
+    for region_id, count in emp_count_result.all():
+        employee_counts[region_id] = count or 0
+
+    site_counts = {}
+    site_count_result = await db.execute(
+        select(Site.region_id, func.count(Site.id))
+        .where(Site.region_id.in_(region_ids))
+        .group_by(Site.region_id)
+    )
+    for region_id, count in site_count_result.all():
+        site_counts[region_id] = count or 0
+
+    return [
+        {
+            "id": region.id,
+            "zone_id": region.zone_id,
+            "zone_name": zones_by_id.get(region.zone_id).zone_name if zones_by_id.get(region.zone_id) else None,
+            "region_name": region.region_name,
+            "notes": region.notes,
+            "status": region.status,
+            "created_at": region.created_at,
+            "employee_count": employee_counts.get(region.id, 0),
+            "site_count": site_counts.get(region.id, 0),
+            "employees": [],
+            "sites": [],
+            "transfer_history": [],
+        }
+        for region in regions
+    ]
+
+
 # ============ ENDPOINTS ============
 
 @router.get("/test")
@@ -194,7 +244,7 @@ async def list_regions(
 
     result = await db.execute(query.order_by(Region.region_name))
     regions = result.scalars().all()
-    return [await _build_region_response(region, db) for region in regions]
+    return await _build_region_list_responses(regions, db)
 
 
 @router.post("", response_model=RegionResponse, status_code=status.HTTP_201_CREATED)

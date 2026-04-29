@@ -51,7 +51,7 @@ async def seed_database():
                 org = Organization(
                     id=org_id,
                     org_id=org_id,  # For organization, org_id points to itself
-                    name="SecureOps Demo",
+                    name="Lakezone Operation System",
                     slug="secureops-demo",
                     logo_url=None,
                     accent_color="#0F172A",
@@ -62,7 +62,7 @@ async def seed_database():
                     is_active=True,
                     bank_details={
                         "bank_name": "CRDB Bank Tanzania",
-                        "account_name": "SecureOps Demo Ltd",
+                        "account_name": "Opsys",
                         "account_number": "0150123456789",
                         "branch": "Dar es Salaam Main Branch",
                         "swift_code": "CORUTZTZ"

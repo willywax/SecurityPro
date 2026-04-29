@@ -1,0 +1,150 @@
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches: [main]
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: us-central1
+  BACKEND_SERVICE: securitypro-api
+  FRONTEND_SERVICE: securitypro-web
+  REGISTRY: us-central1-docker.pkg.dev
+
+jobs:
+  # ──────────────────────────────────────────────
+  deploy-backend:
+    name: Deploy Backend
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev
+
+      - name: Build and Push Backend Image
+        run: |
+          IMAGE=$REGISTRY/$PROJECT_ID/securitypro/api
+          docker build -t $IMAGE:$GITHUB_SHA -t $IMAGE:latest ./backend
+          docker push $IMAGE:$GITHUB_SHA
+          docker push $IMAGE:latest
+
+      - name: Deploy Backend to Cloud Run
+        run: |
+          IMAGE=$REGISTRY/$PROJECT_ID/securitypro/api
+          gcloud run deploy $BACKEND_SERVICE \
+            --image $IMAGE:$GITHUB_SHA \
+            --region $REGION \
+            --platform managed \
+            --allow-unauthenticated \
+            --min-instances 1 \
+            --max-instances 3 \
+            --memory 512Mi \
+            --cpu 1 \
+            --port 8000 \
+            --set-env-vars "DATABASE_URL=${{ secrets.DATABASE_URL }}" \
+            --set-env-vars "JWT_SECRET_KEY=${{ secrets.SECRET_KEY }}" \
+            --set-env-vars "GCS_BUCKET_NAME=${{ secrets.GCS_BUCKET_NAME }}" \
+            --set-env-vars "GCS_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}" \
+            --set-env-vars "CORS_ORIGINS=${{ secrets.VITE_API_URL }}" \
+            --set-env-vars "ALGORITHM=HS256" \
+            --set-env-vars "ACCESS_TOKEN_EXPIRE_MINUTES=30" \
+            --set-env-vars "REFRESH_TOKEN_EXPIRE_DAYS=7" \
+            --service-account ${{ secrets.GCP_RUN_SA_EMAIL }}
+
+      - name: Run Alembic Migrations
+        run: |
+          IMAGE=$REGISTRY/$PROJECT_ID/securitypro/api
+          # Create or update the migration job
+          gcloud run jobs create migrate-job \
+            --image $IMAGE:$GITHUB_SHA \
+            --region $REGION \
+            --set-env-vars "DATABASE_URL=${{ secrets.DATABASE_URL }}" \
+            --command "python" \
+            --args "-m,alembic,upgrade,head" \
+            --service-account ${{ secrets.GCP_RUN_SA_EMAIL }} \
+            --max-retries 1 || \
+          gcloud run jobs update migrate-job \
+            --image $IMAGE:$GITHUB_SHA \
+            --region $REGION \
+            --set-env-vars "DATABASE_URL=${{ secrets.DATABASE_URL }}"
+          # Execute and wait
+          gcloud run jobs execute migrate-job --region $REGION --wait
+
+      - name: Cleanup Old Backend Images
+        run: |
+          gcloud artifacts docker images list \
+            $REGISTRY/$PROJECT_ID/securitypro/api \
+            --sort-by="~CREATE_TIME" \
+            --format="get(version)" | \
+            tail -n +6 | \
+            xargs -I {} gcloud artifacts docker images delete \
+              "$REGISTRY/$PROJECT_ID/securitypro/api@{}" \
+              --quiet || true
+
+  # ──────────────────────────────────────────────
+  deploy-frontend:
+    name: Deploy Frontend
+    runs-on: ubuntu-latest
+    needs: deploy-backend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev
+
+      - name: Build and Push Frontend Image
+        run: |
+          IMAGE=$REGISTRY/$PROJECT_ID/securitypro/web
+          docker build \
+            --build-arg VITE_API_URL=${{ secrets.VITE_API_URL }} \
+            -t $IMAGE:$GITHUB_SHA \
+            -t $IMAGE:latest \
+            ./frontend
+          docker push $IMAGE:$GITHUB_SHA
+          docker push $IMAGE:latest
+
+      - name: Deploy Frontend to Cloud Run
+        run: |
+          IMAGE=$REGISTRY/$PROJECT_ID/securitypro/web
+          gcloud run deploy $FRONTEND_SERVICE \
+            --image $IMAGE:$GITHUB_SHA \
+            --region $REGION \
+            --platform managed \
+            --allow-unauthenticated \
+            --min-instances 0 \
+            --max-instances 2 \
+            --memory 256Mi \
+            --cpu 1 \
+            --port 80
+
+      - name: Cleanup Old Frontend Images
+        run: |
+          gcloud artifacts docker images list \
+            $REGISTRY/$PROJECT_ID/securitypro/web \
+            --sort-by="~CREATE_TIME" \
+            --format="get(version)" | \
+            tail -n +6 | \
+            xargs -I {} gcloud artifacts docker images delete \
+              "$REGISTRY/$PROJECT_ID/securitypro/web@{}" \
+              --quiet || true

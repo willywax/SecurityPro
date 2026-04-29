@@ -265,7 +265,7 @@ POST http://localhost:8000/api/auth/login
 - Password: Admin123!
 
 **Organization**:
-- Name: SecureOps Demo
+- Name: Lakezone Operation System
 - Slug: secureops-demo
 
 ## 🚀 Next Steps (Optional)

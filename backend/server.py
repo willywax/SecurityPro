@@ -94,7 +94,7 @@ async def lifespan(app: FastAPI):
 
 # Create the main app
 app = FastAPI(
-    title="Security Operations SaaS API",
+    title="Lakezone Operation System API",
     description="Multi-tenant SaaS platform for security guard companies",
     version="1.0.0",
     lifespan=lifespan
@@ -124,7 +124,7 @@ api_router.redirect_slashes = False
 # Health check endpoint
 @api_router.get("")
 async def root():
-    return {"message": "Security Operations SaaS API", "status": "healthy"}
+    return {"message": "Lakezone Operation System API", "status": "healthy"}
 
 
 @api_router.get("/health")

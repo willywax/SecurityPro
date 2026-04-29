@@ -93,7 +93,7 @@
       },
       "default_logo": {
         "type": "text-fallback",
-        "text": "SecureOps",
+        "text": "LZone Security",
         "style": "font-bold text-xl tracking-tight flex items-center gap-2"
       }
     },

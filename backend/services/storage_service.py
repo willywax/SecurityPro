@@ -15,6 +15,11 @@ class StorageService:
 
     def __init__(self):
         self.bucket_name = os.getenv("GCS_BUCKET_NAME", "securitypro-media")
+        self.cdn_base_url = (
+            os.getenv("MEDIA_CDN_BASE_URL")
+            or os.getenv("CDN_BASE_URL")
+            or ""
+        ).rstrip("/")
         self._client = None
         self._credentials = None
         self._use_key_signing = False
@@ -70,6 +75,7 @@ class StorageService:
         entity_id: str,
         original_filename: str,
         content_type: str = "application/octet-stream",
+        cache_control: Optional[str] = None,
     ) -> str:
         """
         Upload bytes to GCS.
@@ -85,10 +91,18 @@ class StorageService:
 
         bucket = self._client.bucket(self.bucket_name)
         blob = bucket.blob(gcs_path)
+        if cache_control:
+            blob.cache_control = cache_control
         blob.upload_from_string(file_bytes, content_type=content_type)
 
         logger.info(f"GCS upload: gs://{self.bucket_name}/{gcs_path}")
         return gcs_path
+
+    def get_public_url(self, gcs_path: str) -> Optional[str]:
+        """Return the CDN/public URL for a GCS path when a CDN base URL is configured."""
+        if not self.cdn_base_url:
+            return None
+        return f"{self.cdn_base_url}/{gcs_path.lstrip('/')}"
 
     def get_signed_url(self, gcs_path: str, expiry_minutes: int = 60) -> str:
         """Generate a signed GET URL valid for `expiry_minutes`."""

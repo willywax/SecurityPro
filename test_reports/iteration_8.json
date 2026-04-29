@@ -57,7 +57,7 @@
       "detail_page_status_badge": "PASS - Draft badge shown",
       "detail_page_site_table": "PASS - grouped by site (Musoma FS) with guard row + asset row + site subtotal",
       "detail_page_grand_total": "PASS - TZS 1,650,000 in dark card",
-      "detail_page_bank_details": "PASS - CRDB Bank Tanzania, SecureOps Demo Ltd, 0150123456789, Dar es Salaam Main Branch, CORUTZTZ shown",
+      "detail_page_bank_details": "PASS - CRDB Bank Tanzania, LZone Security Ltd, 0150123456789, Dar es Salaam Main Branch, CORUTZTZ shown",
       "mark_sent_status_change": "PASS - Draft→Sent, Mark Sent button disappears, Mark Paid + Mark Overdue appear",
       "mark_paid_status_change": "PASS - Sent→Paid, status buttons disappear, only Print remains",
       "edit_form_shows_prepopulated": "PASS - Edit form shows existing qty=5 rate=200000 for guard row",
