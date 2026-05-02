@@ -61,6 +61,7 @@ import {
   MapPin,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import EmployeeAutocomplete from '@/components/EmployeeAutocomplete';
 
 // ============ CONFIG MAPS ============
 
@@ -617,21 +618,14 @@ const IssuancesTab = ({ assetId, assetStatus, onAssetStatusChange, api }) => {
             {issueForm.recipient_type === 'employee' ? (
               <div className="space-y-2">
                 <Label>Select Employee *</Label>
-                <Select
+                <EmployeeAutocomplete
+                  employees={employees}
                   value={issueForm.issued_to_employee}
                   onValueChange={(v) => setIssueForm(f => ({ ...f, issued_to_employee: v }))}
-                >
-                  <SelectTrigger data-testid="select-issued-to-employee">
-                    <SelectValue placeholder="Choose employee..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {employees.map(e => (
-                      <SelectItem key={e.id} value={e.id}>
-                        {e.first_name} {e.last_name} ({e.employee_id})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  placeholder="Choose employee..."
+                  emptyText="No employees found."
+                  testId="select-issued-to-employee"
+                />
               </div>
             ) : (
               <div className="space-y-2">

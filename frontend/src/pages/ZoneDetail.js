@@ -15,6 +15,7 @@ import { formatApiError } from '@/utils/errors';
 import zoneService from '@/services/zoneService';
 import regionService from '@/services/regionService';
 import employeeService from '@/services/employeeService';
+import EmployeeAutocomplete from '@/components/EmployeeAutocomplete';
 
 const emptyForm = { zone_name: '', notes: '', status: 'active' };
 
@@ -200,15 +201,14 @@ const ZoneDetail = () => {
                 <div className="p-4 border border-slate-200 rounded-lg bg-slate-50 grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div className="space-y-1">
                     <Label>Employee (Zone Manager title required)</Label>
-                    <Select value={managerForm.employee_id} onValueChange={(v) => setManagerForm((f) => ({ ...f, employee_id: v }))}>
-                      <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
-                      <SelectContent>
-                        {managerCandidates.map((e) => (
-                          <SelectItem key={e.id} value={e.id}>{e.full_name} ({e.employee_id})</SelectItem>
-                        ))}
-                        {managerCandidates.length === 0 && <SelectItem disabled value="_none">No employees with 'Zone Manager' title</SelectItem>}
-                      </SelectContent>
-                    </Select>
+                    <EmployeeAutocomplete
+                      employees={managerCandidates}
+                      value={managerForm.employee_id}
+                      onValueChange={(v) => setManagerForm((f) => ({ ...f, employee_id: v }))}
+                      placeholder={managersQuery.isLoading ? 'Loading employees...' : 'Select employee'}
+                      emptyText="No employees with 'Zone Manager' title"
+                      disabled={managersQuery.isLoading || managerCandidates.length === 0}
+                    />
                   </div>
                   <div className="space-y-1">
                     <Label>Assigned Date</Label>

@@ -24,6 +24,7 @@ import {
 } from '../components/ui/table';
 import { ArrowLeft, Loader2, Save, X, DollarSign } from 'lucide-react';
 import { toast } from 'sonner';
+import EmployeeAutocomplete from '@/components/EmployeeAutocomplete';
 
 const statusOptions = [
   { value: 'draft',    label: 'Draft' },
@@ -145,21 +146,14 @@ const SingleEntryForm = ({ api, onSuccess }) => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label>Employee *</Label>
-            <Select value={form.employee_id} onValueChange={v => set('employee_id', v)}>
-              <SelectTrigger
-                className={errors.employee_id ? 'border-red-500' : ''}
-                data-testid="select-employee"
-              >
-                <SelectValue placeholder="Select employee..." />
-              </SelectTrigger>
-              <SelectContent>
-                {employees.map(e => (
-                  <SelectItem key={e.id} value={e.id}>
-                    {e.first_name} {e.last_name} ({e.employee_id})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <EmployeeAutocomplete
+              employees={employees}
+              value={form.employee_id}
+              onValueChange={v => set('employee_id', v)}
+              placeholder="Select employee..."
+              triggerClassName={errors.employee_id ? 'border-red-500' : ''}
+              testId="select-employee"
+            />
             {errors.employee_id && <p className="text-sm text-red-500">{errors.employee_id}</p>}
           </div>
 

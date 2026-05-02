@@ -16,6 +16,7 @@ import userService from '@/services/userService';
 import { formatApiError } from '@/utils/errors';
 import { USER_MANAGEMENT_ROLES, USER_ROLE_LABELS, USER_ROLE_OPTIONS } from '@/constants/userRoles';
 import { useAuth } from '@/context/AuthContext';
+import EmployeeAutocomplete from '@/components/EmployeeAutocomplete';
 
 const emptyForm = {
   first_name: '',
@@ -339,22 +340,15 @@ const UsersPage = () => {
             </div>
             <div className="space-y-2">
               <Label>Linked Employee</Label>
-              <Select
+              <EmployeeAutocomplete
+                employees={availableEmployees}
                 value={form.employee_id}
                 onValueChange={(value) => setForm((current) => ({ ...current, employee_id: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Optional employee link" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No linked employee</SelectItem>
-                  {availableEmployees.map((employee) => (
-                    <SelectItem key={employee.id} value={employee.id}>
-                      {employee.full_name || `${employee.first_name} ${employee.last_name}`} {employee.employee_id ? `(${employee.employee_id})` : ''}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                placeholder="Optional employee link"
+                includeNone
+                noneValue="none"
+                noneLabel="No linked employee"
+              />
             </div>
             <div className="space-y-2">
               <Label>Status</Label>

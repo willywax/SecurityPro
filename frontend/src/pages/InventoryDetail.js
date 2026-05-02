@@ -16,6 +16,7 @@ import issuanceService from '@/services/issuanceService';
 import employeeService from '@/services/employeeService';
 import siteService from '@/services/siteService';
 import { toast } from 'sonner';
+import EmployeeAutocomplete from '@/components/EmployeeAutocomplete';
 
 const TABS = ['transactions', 'active', 'returned', 'writeoffs'];
 
@@ -437,46 +438,51 @@ const InventoryDetail = () => {
               <label className="text-sm font-medium text-slate-700 block mb-1">
                 {form.issued_to_type === 'employee' ? 'Employee' : 'Site'} *
               </label>
-              <Select
-                value={form.issued_to_id}
-                onValueChange={v => set('issued_to_id', v)}
-                disabled={
-                  form.issued_to_type === 'employee'
-                    ? employeesQuery.isLoading || employeesQuery.isError || employees.length === 0
-                    : sitesQuery.isLoading || sitesQuery.isError || sites.length === 0
-                }
-              >
-                <SelectTrigger className={errors.issued_to_id ? 'border-red-500' : ''}>
-                  <SelectValue
-                    placeholder={
-                      form.issued_to_type === 'employee'
-                        ? employeesQuery.isLoading
-                          ? 'Loading employees...'
-                          : employeesQuery.isError
-                            ? 'Failed to load employees'
-                            : employees.length === 0
-                              ? 'No active employees available'
-                              : 'Select employee'
-                        : sitesQuery.isLoading
+              {form.issued_to_type === 'employee' ? (
+                <EmployeeAutocomplete
+                  employees={employees}
+                  value={form.issued_to_id}
+                  onValueChange={v => set('issued_to_id', v)}
+                  disabled={employeesQuery.isLoading || employeesQuery.isError || employees.length === 0}
+                  placeholder={
+                    employeesQuery.isLoading
+                      ? 'Loading employees...'
+                      : employeesQuery.isError
+                        ? 'Failed to load employees'
+                        : employees.length === 0
+                          ? 'No active employees available'
+                          : 'Select employee'
+                  }
+                  triggerClassName={errors.issued_to_id ? 'border-red-500' : ''}
+                />
+              ) : (
+                <Select
+                  value={form.issued_to_id}
+                  onValueChange={v => set('issued_to_id', v)}
+                  disabled={sitesQuery.isLoading || sitesQuery.isError || sites.length === 0}
+                >
+                  <SelectTrigger className={errors.issued_to_id ? 'border-red-500' : ''}>
+                    <SelectValue
+                      placeholder={
+                        sitesQuery.isLoading
                           ? 'Loading sites...'
                           : sitesQuery.isError
                             ? 'Failed to load sites'
                             : sites.length === 0
                               ? 'No active sites available'
                               : 'Select site'
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {(form.issued_to_type === 'employee' ? employees : sites).map((option) => (
-                    <SelectItem key={option.id} value={option.id}>
-                      {form.issued_to_type === 'employee'
-                        ? `${option.full_name || [option.first_name, option.last_name].filter(Boolean).join(' ')}${option.employee_id ? ` (${option.employee_id})` : ''}`
-                        : `${option.site_name}${option.client_name ? ` (${option.client_name})` : ''}`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {sites.map((option) => (
+                      <SelectItem key={option.id} value={option.id}>
+                        {`${option.site_name}${option.client_name ? ` (${option.client_name})` : ''}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
               {errors.issued_to_id && <p className="text-xs text-red-600 mt-1">{errors.issued_to_id}</p>}
             </div>
             <div className="grid grid-cols-2 gap-3">
