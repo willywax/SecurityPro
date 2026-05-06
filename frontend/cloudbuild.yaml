@@ -4,8 +4,10 @@ steps:
   - 'build'
   - '--build-arg'
   - 'VITE_API_URL=${_VITE_API_URL}'
+  - '-f'
+  - 'frontend/Dockerfile'
   - '-t'
-  - 'gcr.io/$PROJECT_ID/securitypro-frontend:v5'
-  - '.'
+  - 'gcr.io/$PROJECT_ID/securitypro-frontend:$TAG_NAME'
+  - 'frontend'
 images:
-- 'gcr.io/$PROJECT_ID/securitypro-frontend:v5'
+- 'gcr.io/$PROJECT_ID/securitypro-frontend:$TAG_NAME'

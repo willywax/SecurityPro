@@ -1,0 +1,11 @@
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args:
+  - 'build'
+  - '-f'
+  - 'backend/Dockerfile'
+  - '-t'
+  - 'gcr.io/$PROJECT_ID/securitypro-backend:$TAG_NAME'
+  - 'backend'
+images:
+- 'gcr.io/$PROJECT_ID/securitypro-backend:$TAG_NAME'
