@@ -11,6 +11,7 @@ from models.enums import (
     ContractType,
     ContractStatus,
     Relationship,
+    DepartureReason,
 )
 import uuid
 
@@ -57,6 +58,15 @@ class Employee(BaseModel):
     termination_date = Column(Date, nullable=True)
     notes = Column(String, nullable=True)
 
+    # Turnover tracking (added for high staff turnover)
+    total_employment_periods = Column(Integer, nullable=False, default=1, server_default='1')
+    original_hire_date = Column(Date, nullable=True)
+    current_period_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("employment_periods.id", ondelete="SET NULL", use_alter=True, name="fk_employee_current_period"),
+        nullable=True,
+    )
+
     # Relationships
     user = relationship("User", back_populates="employee", foreign_keys="User.employee_id")
     bank_accounts = relationship("EmployeeBankAccount", back_populates="employee", cascade="all, delete-orphan")
@@ -68,6 +78,18 @@ class Employee(BaseModel):
     payrolls = relationship("Payroll", back_populates="employee", cascade="all, delete-orphan")
     region_obj = relationship("Region", back_populates="employees", foreign_keys=[region_id])
     zone_manager_assignments = relationship("ZoneManager", back_populates="employee", cascade="all, delete-orphan")
+    employment_periods_list = relationship(
+        "EmploymentPeriod",
+        back_populates="employee",
+        foreign_keys="EmploymentPeriod.employee_id",
+        cascade="all, delete-orphan",
+        order_by="EmploymentPeriod.period_number",
+    )
+    current_period = relationship(
+        "EmploymentPeriod",
+        foreign_keys=[current_period_id],
+        post_update=True,
+    )
 
 
 class EmployeeBankAccount(BaseModel):
@@ -218,3 +240,24 @@ class EmploymentHistory(BaseModel):
 
     # Relationships
     employee = relationship("Employee", back_populates="employment_history")
+
+
+class EmploymentPeriod(BaseModel):
+    """Tracks each distinct employment period for guards who leave and rejoin."""
+    __tablename__ = "employment_periods"
+
+    employee_id = Column(UUID(as_uuid=True), ForeignKey("employees.id", ondelete="CASCADE"), nullable=False, index=True)
+    period_number = Column(Integer, nullable=False)  # 1, 2, 3 ... per employee
+    start_date = Column(Date, nullable=False)
+    end_date = Column(Date, nullable=True)  # null while still active
+    departure_reason = Column(
+        SQLEnum(DepartureReason, name="departure_reason", create_type=True),
+        nullable=True,
+    )
+    departure_notes = Column(Text, nullable=True)
+    rehire_date = Column(Date, nullable=True)
+    rehired_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    status = Column(String, nullable=False, default="active", server_default="active")  # active | ended
+
+    # Relationships
+    employee = relationship("Employee", back_populates="employment_periods_list", foreign_keys=[employee_id])

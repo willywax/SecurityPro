@@ -239,6 +239,26 @@ const employeeService = {
     const response = await api.delete(`/employees/${employeeId}/documents/${documentId}`);
     return unwrapSingleResponse(response);
   },
+  offboard: async (employeeId, data) => {
+    const response = await api.post(`/employees/${employeeId}/offboard`, {
+      departure_reason: data.departure_reason,
+      last_working_date: data.last_working_date,
+      departure_notes: data.departure_notes || null,
+      end_active_contract: data.end_active_contract !== false,
+    });
+    return normalizeEmployee(unwrapSingleResponse(response));
+  },
+  rehire: async (employeeId, data) => {
+    const response = await api.post(`/employees/${employeeId}/rehire`, {
+      rehire_date: data.rehire_date,
+      notes: data.notes || null,
+    });
+    return normalizeEmployee(unwrapSingleResponse(response));
+  },
+  getEmploymentPeriods: async (employeeId) => {
+    const response = await api.get(`/employees/${employeeId}/employment-periods`);
+    return unwrapSingleResponse(response) || [];
+  },
 };
 
 export default employeeService;

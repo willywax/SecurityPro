@@ -17,9 +17,9 @@ import re
 from db.dependencies import get_db
 from models.employee import (
     Employee, EmployeeBankAccount, EmployeeReferee, EmployeeNextOfKin,
-    EmployeeContract, EmployeeDocument, EmploymentHistory
+    EmployeeContract, EmployeeDocument, EmploymentHistory, EmploymentPeriod
 )
-from models.enums import Gender, MaritalStatus, EmploymentStatus, IDType, ContractStatus, Relationship
+from models.enums import Gender, MaritalStatus, EmploymentStatus, IDType, ContractStatus, Relationship, DepartureReason
 from models.inventory import InventoryIssuance, InventoryItem, AssetType
 from utils.auth import get_token_data
 
@@ -140,6 +140,9 @@ class EmployeeResponse(BaseModel):
     hire_date: Optional[date] = None
     termination_date: Optional[date] = None
     notes: Optional[str] = None
+    total_employment_periods: int = 1
+    original_hire_date: Optional[date] = None
+    current_period_id: Optional[UUID] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
     created_by: Optional[UUID] = None
@@ -349,6 +352,35 @@ class EmployeeIssuedAssetResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class EmploymentPeriodResponse(BaseModel):
+    id: UUID
+    employee_id: UUID
+    period_number: int
+    start_date: date
+    end_date: Optional[date] = None
+    departure_reason: Optional[DepartureReason] = None
+    departure_notes: Optional[str] = None
+    rehire_date: Optional[date] = None
+    rehired_by: Optional[UUID] = None
+    status: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class OffboardRequest(BaseModel):
+    departure_reason: DepartureReason
+    last_working_date: date
+    departure_notes: Optional[str] = None
+    end_active_contract: bool = True
+
+
+class RehireRequest(BaseModel):
+    rehire_date: date
+    notes: Optional[str] = None
 
 
 # ============ HELPERS ============
@@ -1577,6 +1609,158 @@ async def list_gcs_documents(
             name_map[u.id] = f"{u.first_name} {u.last_name}".strip()
 
     return [_build_doc_response(d, name_map.get(d.uploaded_by)) for d in docs]
+
+
+# ============ OFFBOARD / REHIRE / PERIODS ENDPOINTS ============
+
+_DEPARTURE_TO_STATUS = {
+    DepartureReason.RESIGNED: EmploymentStatus.RESIGNED,
+    DepartureReason.TERMINATED: EmploymentStatus.TERMINATED,
+    DepartureReason.CONTRACT_EXPIRED: EmploymentStatus.INACTIVE,
+    DepartureReason.ABSCONDED: EmploymentStatus.ABSCONDED,
+    DepartureReason.OTHER: EmploymentStatus.INACTIVE,
+}
+
+
+@router.post("/{employee_id}/offboard", response_model=EmployeeResponse)
+async def offboard_employee(
+    employee_id: UUID,
+    body: OffboardRequest,
+    db: AsyncSession = Depends(get_db),
+    token_data: dict = Depends(get_token_data),
+):
+    """Offboard an active employee: close current period, update status, optionally terminate contract."""
+    org_id = UUID(token_data.get("org_id"))
+    user_id = UUID(token_data.get("sub"))
+
+    result = await db.execute(
+        select(Employee).where(Employee.id == employee_id, Employee.org_id == org_id)
+    )
+    employee = result.scalar_one_or_none()
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+
+    if employee.employment_status not in (EmploymentStatus.ACTIVE, EmploymentStatus.REHIRED):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot offboard employee with status '{employee.employment_status.value}'"
+        )
+
+    # Close current employment period
+    if employee.current_period_id:
+        period_result = await db.execute(
+            select(EmploymentPeriod).where(EmploymentPeriod.id == employee.current_period_id)
+        )
+        period = period_result.scalar_one_or_none()
+        if period:
+            period.end_date = body.last_working_date
+            period.departure_reason = body.departure_reason
+            period.departure_notes = body.departure_notes
+            period.status = "ended"
+
+    # Update employee record
+    employee.employment_status = _DEPARTURE_TO_STATUS[body.departure_reason]
+    employee.termination_date = body.last_working_date
+
+    # Terminate active contract if requested
+    if body.end_active_contract:
+        contract_result = await db.execute(
+            select(EmployeeContract).where(
+                EmployeeContract.employee_id == employee_id,
+                EmployeeContract.org_id == org_id,
+                EmployeeContract.status == ContractStatus.ACTIVE,
+            )
+        )
+        active_contract = contract_result.scalar_one_or_none()
+        if active_contract:
+            active_contract.status = ContractStatus.TERMINATED
+            active_contract.termination_date = body.last_working_date
+            active_contract.termination_reason = body.departure_notes or body.departure_reason.value
+            active_contract.terminated_by = user_id
+
+    await db.commit()
+    await db.refresh(employee)
+    return await build_employee_response(employee, db)
+
+
+@router.post("/{employee_id}/rehire", response_model=EmployeeResponse)
+async def rehire_employee(
+    employee_id: UUID,
+    body: RehireRequest,
+    db: AsyncSession = Depends(get_db),
+    token_data: dict = Depends(get_token_data),
+):
+    """Rehire a former employee: create new employment period, update status."""
+    org_id = UUID(token_data.get("org_id"))
+    user_id = UUID(token_data.get("sub"))
+
+    result = await db.execute(
+        select(Employee).where(Employee.id == employee_id, Employee.org_id == org_id)
+    )
+    employee = result.scalar_one_or_none()
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+
+    rehireable = (
+        EmploymentStatus.RESIGNED,
+        EmploymentStatus.TERMINATED,
+        EmploymentStatus.ABSCONDED,
+        EmploymentStatus.INACTIVE,
+    )
+    if employee.employment_status not in rehireable:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot rehire employee with status '{employee.employment_status.value}'"
+        )
+
+    new_period_number = employee.total_employment_periods + 1
+
+    new_period = EmploymentPeriod(
+        org_id=org_id,
+        employee_id=employee_id,
+        period_number=new_period_number,
+        start_date=body.rehire_date,
+        rehire_date=body.rehire_date,
+        rehired_by=user_id,
+        departure_notes=body.notes,
+        status="active",
+        created_by=user_id,
+    )
+    db.add(new_period)
+    await db.flush()  # get new_period.id
+
+    employee.employment_status = EmploymentStatus.REHIRED
+    employee.hire_date = body.rehire_date
+    employee.termination_date = None
+    employee.total_employment_periods = new_period_number
+    employee.current_period_id = new_period.id
+
+    await db.commit()
+    await db.refresh(employee)
+    return await build_employee_response(employee, db)
+
+
+@router.get("/{employee_id}/employment-periods", response_model=List[EmploymentPeriodResponse])
+async def get_employment_periods(
+    employee_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    token_data: dict = Depends(get_token_data),
+):
+    """Return all employment periods for an employee in chronological order."""
+    org_id = UUID(token_data.get("org_id"))
+
+    result = await db.execute(
+        select(Employee).where(Employee.id == employee_id, Employee.org_id == org_id)
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Employee not found")
+
+    periods_result = await db.execute(
+        select(EmploymentPeriod)
+        .where(EmploymentPeriod.employee_id == employee_id)
+        .order_by(EmploymentPeriod.period_number)
+    )
+    return periods_result.scalars().all()
 
 
 @router.get("/{employee_id}/documents/{doc_id}", response_model=GCSDocumentResponse)

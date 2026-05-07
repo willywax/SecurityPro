@@ -27,7 +27,28 @@ const statusColors = {
   inactive: 'bg-slate-100 text-slate-700 border-slate-200',
   terminated: 'bg-red-100 text-red-700 border-red-200',
   on_leave: 'bg-amber-100 text-amber-700 border-amber-200',
+  resigned: 'bg-slate-100 text-slate-600 border-slate-200',
+  absconded: 'bg-orange-100 text-orange-700 border-orange-200',
+  rehired: 'bg-blue-100 text-blue-700 border-blue-200',
 };
+
+const statusLabels = {
+  active: 'Active',
+  inactive: 'Inactive',
+  terminated: 'Terminated',
+  on_leave: 'On Leave',
+  resigned: 'Resigned',
+  absconded: 'Absconded',
+  rehired: 'Rehired',
+};
+
+const DEPARTURE_REASON_OPTIONS = [
+  { value: 'resigned', label: 'Resigned' },
+  { value: 'terminated', label: 'Terminated' },
+  { value: 'contract_expired', label: 'Contract Expired' },
+  { value: 'absconded', label: 'Absconded' },
+  { value: 'other', label: 'Other' },
+];
 
 const formatDate = (value) => (value ? new Date(value).toLocaleDateString() : '-');
 const TANZANIA_PHONE_REGEX = /^(\+255|0)[67]\d{8}$/;
@@ -110,6 +131,11 @@ const EmployeeDetail = () => {
   const [photoUrl, setPhotoUrl] = useState(null);
   const [photoLoading, setPhotoLoading] = useState(false);
   const [showPhotoModal, setShowPhotoModal] = useState(false);
+  // Offboard / rehire modals
+  const [showOffboardModal, setShowOffboardModal] = useState(false);
+  const [offboardForm, setOffboardForm] = useState({ departure_reason: '', last_working_date: '', departure_notes: '', end_active_contract: true });
+  const [showRehireModal, setShowRehireModal] = useState(false);
+  const [rehireForm, setRehireForm] = useState({ rehire_date: '', notes: '' });
 
   const employeeQuery = useQuery({ queryKey: ['employee', id], queryFn: () => employeeService.getById(id) });
   const regionsQuery = useQuery({ queryKey: ['regions', 'employee-form'], queryFn: () => regionService.getAll({ status_filter: 'active' }) });
@@ -130,6 +156,11 @@ const EmployeeDetail = () => {
   const documentsQuery = useQuery({
     queryKey: ['employee', id, 'documents'],
     queryFn: () => storageService.getEmployeeDocuments(id),
+    enabled: !!id,
+  });
+  const periodsQuery = useQuery({
+    queryKey: ['employee', id, 'employment-periods'],
+    queryFn: () => employeeService.getEmploymentPeriods(id),
     enabled: !!id,
   });
 
@@ -189,6 +220,32 @@ const EmployeeDetail = () => {
       toast.success('Photo uploaded');
     },
     onError: (error) => toast.error(formatApiError(error, 'Failed to upload photo')),
+  });
+
+  const offboardMutation = useMutation({
+    mutationFn: (payload) => employeeService.offboard(id, payload),
+    onSuccess: (data) => {
+      queryClient.setQueryData(['employee', id], data);
+      queryClient.invalidateQueries({ queryKey: ['employee', id, 'employment-periods'] });
+      refresh();
+      setShowOffboardModal(false);
+      setOffboardForm({ departure_reason: '', last_working_date: '', departure_notes: '', end_active_contract: true });
+      toast.success('Employee offboarded');
+    },
+    onError: (error) => toast.error(formatApiError(error, 'Failed to offboard employee')),
+  });
+
+  const rehireMutation = useMutation({
+    mutationFn: (payload) => employeeService.rehire(id, payload),
+    onSuccess: (data) => {
+      queryClient.setQueryData(['employee', id], data);
+      queryClient.invalidateQueries({ queryKey: ['employee', id, 'employment-periods'] });
+      refresh();
+      setShowRehireModal(false);
+      setRehireForm({ rehire_date: '', notes: '' });
+      toast.success('Employee rehired');
+    },
+    onError: (error) => toast.error(formatApiError(error, 'Failed to rehire employee')),
   });
 
   const deletePhoto = useMutation({
@@ -437,7 +494,7 @@ const EmployeeDetail = () => {
             <div>
               <div className="flex items-center gap-3">
                 <h1 className="text-2xl font-bold tracking-tight text-slate-900">{employee.full_name}</h1>
-                <Badge variant="outline" className={statusColors[employee.employment_status]}>{employee.employment_status}</Badge>
+                <Badge variant="outline" className={statusColors[employee.employment_status]}>{statusLabels[employee.employment_status] || employee.employment_status}</Badge>
               </div>
               <p className="text-slate-500 text-sm">{employee.employee_id} {employee.guard_no && `· Guard #${employee.guard_no}`}</p>
             </div>
@@ -451,6 +508,16 @@ const EmployeeDetail = () => {
             </>
           ) : (
             <>
+              {['active', 'rehired'].includes(employee.employment_status) && (
+                <Button variant="outline" className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200" onClick={() => setShowOffboardModal(true)}>
+                  <XCircle className="w-4 h-4 mr-2" />Offboard
+                </Button>
+              )}
+              {['resigned', 'terminated', 'absconded', 'inactive'].includes(employee.employment_status) && (
+                <Button variant="outline" className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 border-emerald-200" onClick={() => setShowRehireModal(true)}>
+                  <CheckCircle className="w-4 h-4 mr-2" />Rehire
+                </Button>
+              )}
               <Button variant="outline" onClick={() => { setForm(employee); setEditing(true); }}>Edit</Button>
               <Button variant="outline" className="text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => deleteMutation.mutate()}><Trash2 className="w-4 h-4 mr-2" />Delete</Button>
             </>
@@ -504,7 +571,44 @@ const EmployeeDetail = () => {
           </Card>
         </TabsContent>
 
-        <TabsContent value="history" className="mt-6">
+        <TabsContent value="history" className="mt-6 space-y-6">
+          {/* Employment periods timeline */}
+          <div>
+            <h3 className="text-base font-semibold text-slate-900 mb-3">Employment Periods</h3>
+            {periodsQuery.isLoading ? (
+              <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-slate-400" /></div>
+            ) : !periodsQuery.data?.length ? (
+              <Card><CardContent className="py-6 text-center text-slate-500 text-sm">No employment periods recorded</CardContent></Card>
+            ) : (
+              <div className="space-y-2">
+                {periodsQuery.data.map((period) => {
+                  const durationDays = period.end_date
+                    ? Math.round((new Date(period.end_date) - new Date(period.start_date)) / 86400000)
+                    : Math.round((new Date() - new Date(period.start_date)) / 86400000);
+                  return (
+                    <Card key={period.id} className={period.status === 'active' ? 'border-emerald-200' : ''}>
+                      <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-center gap-3">
+                          <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-slate-100 text-slate-600 text-xs font-semibold shrink-0">#{period.period_number}</span>
+                          <div>
+                            <p className="text-sm font-medium text-slate-900">
+                              {formatDate(period.start_date)} — {period.end_date ? formatDate(period.end_date) : <span className="text-emerald-600">Present</span>}
+                            </p>
+                            <p className="text-xs text-slate-500">{durationDays} day{durationDays !== 1 ? 's' : ''}{period.departure_reason && ` · Left: ${DEPARTURE_REASON_OPTIONS.find(o => o.value === period.departure_reason)?.label || period.departure_reason}`}</p>
+                          </div>
+                        </div>
+                        <Badge variant="outline" className={period.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-50 text-slate-500 border-slate-200'}>
+                          {period.status === 'active' ? 'Active' : 'Ended'}
+                        </Badge>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          <div>
+            <h3 className="text-base font-semibold text-slate-900 mb-3">Previous Employer History</h3>
           {editing && <Card className="mb-4">
             <CardHeader><CardTitle className="text-lg">Add History</CardTitle></CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -519,6 +623,7 @@ const EmployeeDetail = () => {
           <Section loading={historyQuery.isLoading} items={historyQuery.data} emptyText="No employment history" render={(item) => (
             <Card key={item.id}><CardContent className="p-4 flex items-start justify-between"><div><p className="font-medium text-slate-900">{item.position}</p><p className="text-slate-500">{item.employer}</p></div>{editing && <Button variant="outline" size="sm" onClick={() => removeItem(employeeService.deleteEmploymentHistory(id, item.id), 'employment-history', 'History deleted')}><Trash2 className="w-4 h-4" /></Button>}</CardContent></Card>
           )} />
+          </div>
         </TabsContent>
 
         <TabsContent value="bank" className="mt-6">
@@ -580,6 +685,12 @@ const EmployeeDetail = () => {
         </TabsContent>
 
         <TabsContent value="contracts" className="mt-6 space-y-4">
+          {employee.employment_status === 'rehired' && !contractsQuery.data?.some(c => c.status === 'active') && (
+            <div className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4">
+              <AlertTriangle className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+              <p className="text-sm text-blue-800">This employee has been rehired. Please create a new contract to set their active employment terms.</p>
+            </div>
+          )}
           {/* Terminate Modal */}
           {terminateTarget && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -1005,6 +1116,108 @@ const EmployeeDetail = () => {
           })()}
         </TabsContent>
       </Tabs>
+
+      {/* Offboard Modal */}
+      {showOffboardModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <Card className="w-full max-w-md">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg text-red-600">Offboard Employee</CardTitle>
+                <button onClick={() => { setShowOffboardModal(false); setOffboardForm({ departure_reason: '', last_working_date: '', departure_notes: '', end_active_contract: true }); }}><X className="w-5 h-5 text-slate-400 hover:text-slate-700" /></button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-1">
+                <Label>Departure Reason *</Label>
+                <select
+                  value={offboardForm.departure_reason}
+                  onChange={e => setOffboardForm(f => ({ ...f, departure_reason: e.target.value }))}
+                  className="w-full border rounded-md px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 border-slate-200"
+                >
+                  <option value="">Select reason...</option>
+                  {DEPARTURE_REASON_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <Label>Last Working Date *</Label>
+                <Input type="date" value={offboardForm.last_working_date} onChange={e => setOffboardForm(f => ({ ...f, last_working_date: e.target.value }))} />
+              </div>
+              <div className="space-y-1">
+                <Label>Notes</Label>
+                <Input value={offboardForm.departure_notes} onChange={e => setOffboardForm(f => ({ ...f, departure_notes: e.target.value }))} placeholder="Optional notes" />
+              </div>
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={offboardForm.end_active_contract}
+                  onChange={e => setOffboardForm(f => ({ ...f, end_active_contract: e.target.checked }))}
+                  className="w-4 h-4 accent-slate-900"
+                />
+                Terminate active contract
+              </label>
+              <div className="flex gap-2 pt-2">
+                <Button
+                  className="bg-red-600 hover:bg-red-700 text-white"
+                  disabled={offboardMutation.isPending}
+                  onClick={() => {
+                    if (!offboardForm.departure_reason) { toast.error('Departure reason is required'); return; }
+                    if (!offboardForm.last_working_date) { toast.error('Last working date is required'); return; }
+                    offboardMutation.mutate(offboardForm);
+                  }}
+                >
+                  {offboardMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <XCircle className="w-4 h-4 mr-2" />}
+                  Offboard
+                </Button>
+                <Button variant="outline" onClick={() => { setShowOffboardModal(false); setOffboardForm({ departure_reason: '', last_working_date: '', departure_notes: '', end_active_contract: true }); }}>Cancel</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Rehire Modal */}
+      {showRehireModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <Card className="w-full max-w-md">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg text-emerald-600">Rehire Employee</CardTitle>
+                <button onClick={() => { setShowRehireModal(false); setRehireForm({ rehire_date: '', notes: '' }); }}><X className="w-5 h-5 text-slate-400 hover:text-slate-700" /></button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {employee.total_employment_periods > 0 && (
+                <div className="rounded-lg bg-blue-50 border border-blue-100 px-4 py-3 text-sm text-blue-800">
+                  This employee has had <strong>{employee.total_employment_periods}</strong> previous employment period{employee.total_employment_periods !== 1 ? 's' : ''}.
+                </div>
+              )}
+              <div className="space-y-1">
+                <Label>Rehire Date *</Label>
+                <Input type="date" value={rehireForm.rehire_date} onChange={e => setRehireForm(f => ({ ...f, rehire_date: e.target.value }))} />
+              </div>
+              <div className="space-y-1">
+                <Label>Notes</Label>
+                <Input value={rehireForm.notes} onChange={e => setRehireForm(f => ({ ...f, notes: e.target.value }))} placeholder="Optional notes" />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <Button
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                  disabled={rehireMutation.isPending}
+                  onClick={() => {
+                    if (!rehireForm.rehire_date) { toast.error('Rehire date is required'); return; }
+                    rehireMutation.mutate(rehireForm);
+                  }}
+                >
+                  {rehireMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle className="w-4 h-4 mr-2" />}
+                  Rehire
+                </Button>
+                <Button variant="outline" onClick={() => { setShowRehireModal(false); setRehireForm({ rehire_date: '', notes: '' }); }}>Cancel</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {showPhotoModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 py-6" onClick={() => setShowPhotoModal(false)}>

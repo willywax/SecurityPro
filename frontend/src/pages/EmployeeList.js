@@ -31,6 +31,9 @@ const statusColors = {
   inactive: 'bg-slate-100 text-slate-700 border-slate-200',
   terminated: 'bg-red-100 text-red-700 border-red-200',
   on_leave: 'bg-amber-100 text-amber-700 border-amber-200',
+  resigned: 'bg-slate-100 text-slate-600 border-slate-200',
+  absconded: 'bg-orange-100 text-orange-700 border-orange-200',
+  rehired: 'bg-blue-100 text-blue-700 border-blue-200',
 };
 
 const statusLabels = {
@@ -38,6 +41,9 @@ const statusLabels = {
   inactive: 'Inactive',
   terminated: 'Terminated',
   on_leave: 'On Leave',
+  resigned: 'Resigned',
+  absconded: 'Absconded',
+  rehired: 'Rehired',
 };
 
 const EmployeeAvatar = ({ employee, size = 'md' }) => {

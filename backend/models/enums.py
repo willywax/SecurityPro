@@ -39,6 +39,18 @@ class EmploymentStatus(str, enum.Enum):
     INACTIVE = "inactive"
     TERMINATED = "terminated"
     ON_LEAVE = "on_leave"
+    RESIGNED = "resigned"
+    ABSCONDED = "absconded"
+    REHIRED = "rehired"
+
+
+class DepartureReason(str, enum.Enum):
+    """Reason an employee departed."""
+    RESIGNED = "resigned"
+    TERMINATED = "terminated"
+    CONTRACT_EXPIRED = "contract_expired"
+    ABSCONDED = "absconded"
+    OTHER = "other"
 
 
 class IDType(str, enum.Enum):

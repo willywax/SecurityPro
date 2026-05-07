@@ -14,6 +14,7 @@ from models.employee import (  # noqa: F401, E402
     EmployeeContract,
     EmployeeDocument,
     EmploymentHistory,
+    EmploymentPeriod,
 )
 from models.client import Client  # noqa: F401, E402
 from models.site import Site  # noqa: F401, E402
