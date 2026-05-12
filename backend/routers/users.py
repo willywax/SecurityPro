@@ -1,4 +1,5 @@
 """Users management router."""
+from datetime import date
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -250,3 +251,95 @@ async def update_user(
     await db.commit()
     await db.refresh(user)
     return await build_user_list_item(db, user)
+
+
+# ============ ZONE ASSIGNMENT ENDPOINTS ============
+
+class ZoneAssignmentItem(BaseModel):
+    zone_id: UUID
+    zone_name: str
+    assigned_date: date
+
+
+class UserZoneAssignRequest(BaseModel):
+    zone_ids: list[UUID]
+
+
+@router.get("/{user_id}/zones", response_model=list[ZoneAssignmentItem])
+async def get_user_zones(
+    user_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    token_data: dict = Depends(get_token_data),
+):
+    """Return the active zone assignments for a user."""
+    org_id, _ = require_management_access(token_data)
+    from models.user_zone_assignment import UserZoneAssignment
+    from models.zone import Zone
+
+    rows = (
+        await db.execute(
+            select(UserZoneAssignment, Zone)
+            .join(Zone, UserZoneAssignment.zone_id == Zone.id)
+            .where(
+                UserZoneAssignment.user_id == user_id,
+                UserZoneAssignment.org_id == org_id,
+                UserZoneAssignment.status == "active",
+            )
+        )
+    ).all()
+    return [
+        {"zone_id": uza.zone_id, "zone_name": zone.zone_name, "assigned_date": uza.assigned_date}
+        for uza, zone in rows
+    ]
+
+
+@router.post("/{user_id}/zones", response_model=list[ZoneAssignmentItem])
+async def update_user_zones(
+    user_id: UUID,
+    payload: UserZoneAssignRequest,
+    db: AsyncSession = Depends(get_db),
+    token_data: dict = Depends(get_token_data),
+):
+    """Replace a user's zone assignments (deactivate old, create new)."""
+    org_id, actor_id = require_management_access(token_data)
+    from models.user_zone_assignment import UserZoneAssignment
+    from models.zone import Zone
+
+    # Deactivate all current active assignments
+    current = (
+        await db.execute(
+            select(UserZoneAssignment).where(
+                UserZoneAssignment.user_id == user_id,
+                UserZoneAssignment.org_id == org_id,
+                UserZoneAssignment.status == "active",
+            )
+        )
+    ).scalars().all()
+    for uza in current:
+        uza.status = "inactive"
+
+    # Create new active assignments
+    result_items = []
+    for zone_id in payload.zone_ids:
+        zone = (
+            await db.execute(select(Zone).where(Zone.id == zone_id, Zone.org_id == org_id))
+        ).scalar_one_or_none()
+        if not zone:
+            raise HTTPException(status_code=404, detail=f"Zone {zone_id} not found")
+        uza = UserZoneAssignment(
+            org_id=org_id,
+            user_id=user_id,
+            zone_id=zone_id,
+            assigned_date=date.today(),
+            assigned_by=actor_id,
+            status="active",
+            created_by=actor_id,
+        )
+        db.add(uza)
+        result_items.append((uza, zone))
+
+    await db.commit()
+    return [
+        {"zone_id": uza.zone_id, "zone_name": zone.zone_name, "assigned_date": uza.assigned_date}
+        for uza, zone in result_items
+    ]

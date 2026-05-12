@@ -90,6 +90,8 @@ def upgrade():
     """)
 
     # ── 6. Create period_number=1 record for each existing employee ────────
+    # Use UPPER() to handle both legacy uppercase (ACTIVE/INACTIVE) and new
+    # lowercase (resigned/absconded/rehired) enum values.
     op.execute("""
         INSERT INTO employment_periods (
             id, org_id, employee_id, period_number,
@@ -103,19 +105,19 @@ def upgrade():
             1,
             COALESCE(hire_date, created_at::date),
             CASE
-                WHEN employment_status IN ('terminated', 'resigned', 'absconded', 'inactive')
+                WHEN UPPER(employment_status::text) NOT IN ('ACTIVE', 'ON_LEAVE', 'REHIRED')
                 THEN termination_date
                 ELSE NULL
             END,
             CASE
-                WHEN employment_status IN ('active', 'on_leave', 'rehired')
+                WHEN UPPER(employment_status::text) IN ('ACTIVE', 'ON_LEAVE', 'REHIRED')
                 THEN 'active'
                 ELSE 'ended'
             END,
             CASE
-                WHEN employment_status = 'terminated'  THEN 'terminated'::departure_reason
-                WHEN employment_status = 'resigned'    THEN 'resigned'::departure_reason
-                WHEN employment_status = 'absconded'   THEN 'absconded'::departure_reason
+                WHEN UPPER(employment_status::text) = 'TERMINATED' THEN 'terminated'::departure_reason
+                WHEN UPPER(employment_status::text) = 'RESIGNED'   THEN 'resigned'::departure_reason
+                WHEN UPPER(employment_status::text) = 'ABSCONDED'  THEN 'absconded'::departure_reason
                 ELSE NULL
             END,
             now(),

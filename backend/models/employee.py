@@ -12,6 +12,7 @@ from models.enums import (
     ContractStatus,
     Relationship,
     DepartureReason,
+    AvailabilityStatus,
 )
 import uuid
 
@@ -67,6 +68,24 @@ class Employee(BaseModel):
         nullable=True,
     )
 
+    # Site allocation tracking
+    current_site_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("sites.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    availability_status = Column(
+        SQLEnum(
+            AvailabilityStatus,
+            name="availability_status",
+            create_type=True,
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
+        nullable=False,
+        default=AvailabilityStatus.AVAILABLE,
+        server_default="available",
+    )
+
     # Relationships
     user = relationship("User", back_populates="employee", foreign_keys="User.employee_id")
     bank_accounts = relationship("EmployeeBankAccount", back_populates="employee", cascade="all, delete-orphan")
@@ -89,6 +108,19 @@ class Employee(BaseModel):
         "EmploymentPeriod",
         foreign_keys=[current_period_id],
         post_update=True,
+    )
+    current_site = relationship("Site", foreign_keys=[current_site_id])
+    site_allocations = relationship(
+        "EmployeeSiteAllocation",
+        back_populates="employee",
+        foreign_keys="EmployeeSiteAllocation.employee_id",
+        order_by="EmployeeSiteAllocation.start_date.desc()",
+    )
+    transfers = relationship(
+        "GuardTransfer",
+        back_populates="employee",
+        foreign_keys="GuardTransfer.employee_id",
+        order_by="GuardTransfer.transfer_date.desc()",
     )
 
 

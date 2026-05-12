@@ -19,7 +19,7 @@ from models.employee import (
     Employee, EmployeeBankAccount, EmployeeReferee, EmployeeNextOfKin,
     EmployeeContract, EmployeeDocument, EmploymentHistory, EmploymentPeriod
 )
-from models.enums import Gender, MaritalStatus, EmploymentStatus, IDType, ContractStatus, Relationship, DepartureReason
+from models.enums import Gender, MaritalStatus, EmploymentStatus, IDType, ContractStatus, Relationship, DepartureReason, AvailabilityStatus
 from models.inventory import InventoryIssuance, InventoryItem, AssetType
 from utils.auth import get_token_data
 
@@ -143,6 +143,9 @@ class EmployeeResponse(BaseModel):
     total_employment_periods: int = 1
     original_hire_date: Optional[date] = None
     current_period_id: Optional[UUID] = None
+    current_site_id: Optional[UUID] = None
+    current_site_name: Optional[str] = None
+    availability_status: AvailabilityStatus = AvailabilityStatus.AVAILABLE
     created_at: datetime
     updated_at: Optional[datetime] = None
     created_by: Optional[UUID] = None
@@ -432,12 +435,15 @@ async def build_employee_response(employee: Employee, db: AsyncSession) -> dict:
 
 
 async def build_employee_responses(employees: list[Employee], db: AsyncSession) -> list[dict]:
-    """Enrich employees with region and zone labels using batched lookups."""
+    """Enrich employees with region, zone, and current site labels using batched lookups."""
     from models.zone import Region, Zone
+    from models.site import Site
 
     region_ids = {employee.region_id for employee in employees if employee.region_id}
+    site_ids = {employee.current_site_id for employee in employees if employee.current_site_id}
     regions_by_id = {}
     zones_by_id = {}
+    sites_by_id = {}
 
     if region_ids:
         regions_result = await db.execute(select(Region).where(Region.id.in_(region_ids)))
@@ -449,17 +455,22 @@ async def build_employee_responses(employees: list[Employee], db: AsyncSession) 
             zones_result = await db.execute(select(Zone).where(Zone.id.in_(zone_ids)))
             zones_by_id = {zone.id: zone for zone in zones_result.scalars().all()}
 
+    if site_ids:
+        sites_result = await db.execute(select(Site).where(Site.id.in_(site_ids)))
+        sites_by_id = {site.id: site for site in sites_result.scalars().all()}
+
     responses = []
     for employee in employees:
-        responses.append(build_employee_response_from_maps(employee, regions_by_id, zones_by_id))
+        responses.append(build_employee_response_from_maps(employee, regions_by_id, zones_by_id, sites_by_id))
     return responses
 
 
-def build_employee_response_from_maps(employee: Employee, regions_by_id: dict, zones_by_id: dict) -> dict:
-    """Build an employee response from already-loaded region and zone maps."""
+def build_employee_response_from_maps(employee: Employee, regions_by_id: dict, zones_by_id: dict, sites_by_id: dict = None) -> dict:
+    """Build an employee response from already-loaded region, zone, and site maps."""
     emp_dict = {c.key: getattr(employee, c.key) for c in employee.__table__.columns}
     emp_dict["region_name"] = None
     emp_dict["zone_name"] = None
+    emp_dict["current_site_name"] = None
     emp_dict["photo_url"] = None
 
     if employee.photo_path:
@@ -474,6 +485,10 @@ def build_employee_response_from_maps(employee: Employee, regions_by_id: dict, z
         emp_dict["region_name"] = region.region_name
         zone = zones_by_id.get(region.zone_id)
         emp_dict["zone_name"] = zone.zone_name if zone else None
+
+    if sites_by_id and employee.current_site_id:
+        site = sites_by_id.get(employee.current_site_id)
+        emp_dict["current_site_name"] = site.site_name if site else None
 
     return emp_dict
 
@@ -574,6 +589,7 @@ async def get_employees(
     page_size: int = Query(50, ge=1, le=100),
     search: Optional[str] = None,
     status_filter: Optional[EmploymentStatus] = None,
+    availability_status: Optional[AvailabilityStatus] = None,
     region_id: Optional[UUID] = None,
     zone_id: Optional[UUID] = None,
     db: AsyncSession = Depends(get_db),
@@ -581,11 +597,22 @@ async def get_employees(
 ):
     """Get all employees with pagination and filters"""
     from models.zone import Region
+    from middleware.zone_scope import get_zone_ids_for_user
 
     org_id = UUID(token_data.get("org_id"))
+    user_id = UUID(token_data.get("sub"))
+    role = token_data.get("role", "")
 
     # Base query
     query = select(Employee).where(Employee.org_id == org_id)
+
+    # Zone-based data scoping
+    allowed_zone_ids = await get_zone_ids_for_user(user_id, role, org_id, db)
+    if allowed_zone_ids is not None:
+        scoped_region_ids = select(Region.id).where(
+            Region.zone_id.in_(allowed_zone_ids), Region.org_id == org_id
+        )
+        query = query.where(Employee.region_id.in_(scoped_region_ids))
 
     # Apply filters
     if search:
@@ -600,6 +627,8 @@ async def get_employees(
         )
     if status_filter:
         query = query.where(Employee.employment_status == status_filter)
+    if availability_status:
+        query = query.where(Employee.availability_status == availability_status)
     if region_id:
         query = query.where(Employee.region_id == region_id)
     elif zone_id:

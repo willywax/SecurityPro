@@ -31,3 +31,6 @@ from models.invoice import (  # noqa: F401, E402
     Payment,
     PaymentAllocation,
 )
+from models.allocation import EmployeeSiteAllocation, GuardTransfer  # noqa: F401, E402
+from models.user_zone_assignment import UserZoneAssignment  # noqa: F401, E402
+from models.daily_log import DailyLog, DailyLogAttendance, DailyLogIncident  # noqa: F401, E402

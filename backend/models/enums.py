@@ -44,6 +44,12 @@ class EmploymentStatus(str, enum.Enum):
     REHIRED = "rehired"
 
 
+class AvailabilityStatus(str, enum.Enum):
+    """Guard availability for site allocation."""
+    AVAILABLE = "available"
+    ALLOCATED = "allocated"
+
+
 class DepartureReason(str, enum.Enum):
     """Reason an employee departed."""
     RESIGNED = "resigned"

@@ -30,6 +30,10 @@ import ZoneDetail from './pages/ZoneDetail';
 import RegionList from './pages/RegionList';
 import RegionDetail from './pages/RegionDetail';
 import UsersPage from './pages/UsersPage';
+import AllocationsPage from './pages/AllocationsPage';
+import DailyLogsPage from './pages/DailyLogsPage';
+import SubmitDailyLogPage from './pages/SubmitDailyLogPage';
+import DailyLogDetailPage from './pages/DailyLogDetailPage';
 import { Toaster } from './components/ui/sonner';
 
 // Placeholder pages for navigation items
@@ -87,6 +91,10 @@ function App() {
             <Route path="/regions/new" element={<RegionDetail />} />
             <Route path="/regions/:id" element={<RegionDetail />} />
             <Route path="/users" element={<UsersPage />} />
+            <Route path="/allocations" element={<AllocationsPage />} />
+            <Route path="/daily-logs" element={<DailyLogsPage />} />
+            <Route path="/daily-logs/new" element={<SubmitDailyLogPage />} />
+            <Route path="/daily-logs/:id" element={<DailyLogDetailPage />} />
             <Route path="/settings" element={<PlaceholderPage title="Settings" />} />
           </Route>
 

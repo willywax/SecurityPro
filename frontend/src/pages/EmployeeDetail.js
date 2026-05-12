@@ -10,9 +10,10 @@ import { Textarea } from '../components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Badge } from '../components/ui/badge';
 import { EmptyState } from '../components/ui/empty-state';
-import { AlertTriangle, ArrowLeft, Camera, CheckCircle, CreditCard, Download, Eye, File, FileText, Heart, Loader2, Package, Printer, Plus, Save, Trash2, Upload, User, Users, X, XCircle } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowRightLeft, Camera, CheckCircle, CreditCard, Download, Eye, File, FileText, Heart, Loader2, MapPin, Package, Printer, Plus, Save, Trash2, Upload, User, Users, X, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import employeeService from '@/services/employeeService';
+import allocationService from '@/services/allocationService';
 import storageService from '@/services/storageService';
 import regionService from '@/services/regionService';
 import { API_BASE_URL } from '@/lib/api';
@@ -161,6 +162,16 @@ const EmployeeDetail = () => {
   const periodsQuery = useQuery({
     queryKey: ['employee', id, 'employment-periods'],
     queryFn: () => employeeService.getEmploymentPeriods(id),
+    enabled: !!id,
+  });
+  const allocationHistoryQuery = useQuery({
+    queryKey: ['employee', id, 'allocation-history'],
+    queryFn: () => allocationService.getEmployeeAllocationHistory(id),
+    enabled: !!id,
+  });
+  const transferHistoryQuery = useQuery({
+    queryKey: ['employee', id, 'transfer-history'],
+    queryFn: () => allocationService.getEmployeeTransfers(id),
     enabled: !!id,
   });
 
@@ -535,6 +546,7 @@ const EmployeeDetail = () => {
           <TabsTrigger value="contracts" className="data-[state=active]:border-b-2 data-[state=active]:border-[#0F172A] data-[state=active]:bg-transparent rounded-none px-4 py-3"><FileText className="w-4 h-4 mr-2" />Contracts</TabsTrigger>
           <TabsTrigger value="assets" className="data-[state=active]:border-b-2 data-[state=active]:border-[#0F172A] data-[state=active]:bg-transparent rounded-none px-4 py-3"><Package className="w-4 h-4 mr-2" />Assets</TabsTrigger>
           <TabsTrigger value="documents" className="data-[state=active]:border-b-2 data-[state=active]:border-[#0F172A] data-[state=active]:bg-transparent rounded-none px-4 py-3"><File className="w-4 h-4 mr-2" />Documents</TabsTrigger>
+          <TabsTrigger value="allocation" className="data-[state=active]:border-b-2 data-[state=active]:border-[#0F172A] data-[state=active]:bg-transparent rounded-none px-4 py-3"><MapPin className="w-4 h-4 mr-2" />Allocation</TabsTrigger>
         </TabsList>
 
         <TabsContent value="profile" className="mt-6">
@@ -1114,6 +1126,113 @@ const EmployeeDetail = () => {
               </div>
             );
           })()}
+        </TabsContent>
+
+        <TabsContent value="allocation" className="mt-6 space-y-6">
+          {/* Current allocation card */}
+          {employee.availability_status === 'allocated' && employee.current_site_id ? (
+            (() => {
+              const activeAlloc = allocationHistoryQuery.data?.find(a => a.status === 'active');
+              return (
+                <Card className="border-blue-200">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base flex items-center gap-2"><MapPin className="w-4 h-4 text-blue-600" />Current Site Allocation</CardTitle>
+                      <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">Allocated</Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {allocationHistoryQuery.isLoading ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : activeAlloc ? (
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div><p className="text-slate-500 text-xs">Site</p><Link to={`/sites/${activeAlloc.site_id}`} className="font-medium text-slate-900 hover:underline">{activeAlloc.site_name || '-'}</Link></div>
+                        <div><p className="text-slate-500 text-xs">Zone</p><p className="font-medium text-slate-900">{activeAlloc.zone_name || '-'}</p></div>
+                        <div><p className="text-slate-500 text-xs">Allocated Since</p><p className="font-medium text-slate-900">{formatDate(activeAlloc.start_date)}</p></div>
+                      </div>
+                    ) : null}
+                  </CardContent>
+                </Card>
+              );
+            })()
+          ) : (
+            <Card>
+              <CardContent className="py-8 flex items-center gap-3">
+                <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-sm px-3 py-1">Available</Badge>
+                <span className="text-slate-500 text-sm">Not currently allocated to any site</span>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Allocation History */}
+          <div>
+            <h3 className="text-base font-semibold text-slate-900 mb-3">Allocation History</h3>
+            {allocationHistoryQuery.isLoading ? (
+              <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-slate-400" /></div>
+            ) : !allocationHistoryQuery.data?.length ? (
+              <Card><CardContent className="py-6 text-center text-slate-500 text-sm">No allocation history</CardContent></Card>
+            ) : (
+              <div className="overflow-x-auto rounded-lg border border-slate-200">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                      <th className="text-left px-4 py-2.5 font-medium text-slate-600">Site</th>
+                      <th className="text-left px-4 py-2.5 font-medium text-slate-600">Zone</th>
+                      <th className="text-left px-4 py-2.5 font-medium text-slate-600">From</th>
+                      <th className="text-left px-4 py-2.5 font-medium text-slate-600">To</th>
+                      <th className="text-left px-4 py-2.5 font-medium text-slate-600">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {allocationHistoryQuery.data.map(a => (
+                      <tr key={a.id} className="hover:bg-slate-50">
+                        <td className="px-4 py-2.5"><Link to={`/sites/${a.site_id}`} className="text-slate-900 hover:underline font-medium">{a.site_name || '-'}</Link></td>
+                        <td className="px-4 py-2.5 text-slate-600">{a.zone_name || '-'}</td>
+                        <td className="px-4 py-2.5 text-slate-600">{formatDate(a.start_date)}</td>
+                        <td className="px-4 py-2.5 text-slate-600">{a.end_date ? formatDate(a.end_date) : <span className="text-emerald-600">Present</span>}</td>
+                        <td className="px-4 py-2.5">
+                          <Badge variant="outline" className={a.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-50 text-slate-500 border-slate-200'}>{a.status === 'active' ? 'Active' : 'Ended'}</Badge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Transfer History */}
+          <div>
+            <h3 className="text-base font-semibold text-slate-900 mb-3">Transfer History</h3>
+            {transferHistoryQuery.isLoading ? (
+              <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-slate-400" /></div>
+            ) : !transferHistoryQuery.data?.length ? (
+              <Card><CardContent className="py-6 text-center text-slate-500 text-sm">No transfer history</CardContent></Card>
+            ) : (
+              <div className="overflow-x-auto rounded-lg border border-slate-200">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                      <th className="text-left px-4 py-2.5 font-medium text-slate-600">From Site</th>
+                      <th className="text-left px-4 py-2.5 font-medium text-slate-600">To Site</th>
+                      <th className="text-left px-4 py-2.5 font-medium text-slate-600">Date</th>
+                      <th className="text-left px-4 py-2.5 font-medium text-slate-600">Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {transferHistoryQuery.data.map(t => (
+                      <tr key={t.id} className="hover:bg-slate-50">
+                        <td className="px-4 py-2.5 text-slate-900">{t.from_site_name || '-'}</td>
+                        <td className="px-4 py-2.5 text-slate-900">{t.to_site_name || '-'}</td>
+                        <td className="px-4 py-2.5 text-slate-600">{formatDate(t.transfer_date)}</td>
+                        <td className="px-4 py-2.5 text-slate-600 max-w-xs truncate">{t.reason || '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </TabsContent>
       </Tabs>
 

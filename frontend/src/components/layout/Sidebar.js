@@ -21,6 +21,8 @@ import {
   Globe,
   Map,
   UserCog,
+  ArrowRightLeft,
+  ClipboardList,
 } from 'lucide-react';
 import { USER_MANAGEMENT_ROLES } from '@/constants/userRoles';
 
@@ -32,18 +34,22 @@ const assetsSubNav = [
   { name: 'Asset Types', href: '/asset-types', icon: Tag },
 ];
 
+// allAccess: true = visible to all roles
+// zoneManager: true = visible to zone managers
 const topNavigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Employees', href: '/employees', icon: Users },
-  { name: 'Clients', href: '/clients', icon: Building2 },
-  { name: 'Sites', href: '/sites', icon: MapPin },
-  { name: 'Zones', href: '/zones', icon: Globe },
-  { name: 'Regions', href: '/regions', icon: Map },
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, allAccess: true, zoneManager: true },
+  { name: 'Employees', href: '/employees', icon: Users, allAccess: true, zoneManager: true },
+  { name: 'Clients', href: '/clients', icon: Building2, allAccess: true, zoneManager: true },
+  { name: 'Sites', href: '/sites', icon: MapPin, allAccess: true, zoneManager: true },
+  { name: 'Zones', href: '/zones', icon: Globe, allAccess: true, zoneManager: false },
+  { name: 'Regions', href: '/regions', icon: Map, allAccess: true, zoneManager: false },
+  { name: 'Allocations', href: '/allocations', icon: ArrowRightLeft, allAccess: true, zoneManager: true },
+  { name: 'Daily Logs', href: '/daily-logs', icon: ClipboardList, allAccess: true, zoneManager: true },
 ];
 
 const bottomNavigation = [
-  { name: 'Payroll', href: '/payroll', icon: DollarSign },
-  { name: 'Invoices', href: '/invoices', icon: FileText },
+  { name: 'Payroll', href: '/payroll', icon: DollarSign, allAccess: true, zoneManager: false },
+  { name: 'Invoices', href: '/invoices', icon: FileText, allAccess: true, zoneManager: false },
 ];
 
 const Sidebar = ({ onClose }) => {
@@ -52,6 +58,7 @@ const Sidebar = ({ onClose }) => {
   const isAssetsActive = assetsSubNav.some(item => location.pathname.startsWith(item.href));
   const [assetsOpen, setAssetsOpen] = useState(isAssetsActive);
   const canManageUsers = USER_MANAGEMENT_ROLES.has(user?.role);
+  const isZoneManager = user?.role === 'zone_manager';
 
   const handleLogout = async () => {
     await logout();
@@ -65,6 +72,13 @@ const Sidebar = ({ onClose }) => {
         ? 'bg-slate-700/70 text-white'
         : 'text-slate-400 hover:bg-slate-700/50 hover:text-white'
     );
+
+  const visibleTopNav = topNavigation.filter(item =>
+    isZoneManager ? item.zoneManager : item.allAccess
+  );
+  const visibleBottomNav = bottomNavigation.filter(item =>
+    isZoneManager ? item.zoneManager : item.allAccess
+  );
 
   return (
     <div className="flex flex-col h-full bg-[#0F172A] text-slate-300" data-testid="sidebar">
@@ -84,7 +98,7 @@ const Sidebar = ({ onClose }) => {
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {topNavigation.map((item) => (
+        {visibleTopNav.map((item) => (
           <NavLink
             key={item.name}
             to={item.href}
@@ -97,48 +111,50 @@ const Sidebar = ({ onClose }) => {
           </NavLink>
         ))}
 
-        {/* Assets section with sub-nav */}
-        <div>
-          <button
-            onClick={() => setAssetsOpen(o => !o)}
-            className={cn(
-              'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-              isAssetsActive
-                ? 'bg-slate-700/70 text-white'
-                : 'text-slate-400 hover:bg-slate-700/50 hover:text-white'
+        {/* Assets section — hidden for zone managers */}
+        {!isZoneManager && (
+          <div>
+            <button
+              onClick={() => setAssetsOpen(o => !o)}
+              className={cn(
+                'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                isAssetsActive
+                  ? 'bg-slate-700/70 text-white'
+                  : 'text-slate-400 hover:bg-slate-700/50 hover:text-white'
+              )}
+            >
+              <Package className="w-5 h-5 flex-shrink-0" />
+              <span className="flex-1 text-left">Assets</span>
+              <ChevronDown className={cn('w-4 h-4 transition-transform', assetsOpen ? 'rotate-180' : '')} />
+            </button>
+
+            {assetsOpen && (
+              <div className="ml-4 mt-1 space-y-0.5 border-l border-slate-700/50 pl-3">
+                {assetsSubNav.map((item) => (
+                  <NavLink
+                    key={item.name}
+                    to={item.href}
+                    onClick={onClose}
+                    className={({ isActive }) =>
+                      cn(
+                        'flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+                        isActive
+                          ? 'bg-slate-700/70 text-white'
+                          : 'text-slate-400 hover:bg-slate-700/50 hover:text-slate-200'
+                      )
+                    }
+                    data-testid={`nav-${item.name.toLowerCase().replace(/\s+/g, '-')}`}
+                  >
+                    <item.icon className="w-4 h-4 flex-shrink-0" />
+                    {item.name}
+                  </NavLink>
+                ))}
+              </div>
             )}
-          >
-            <Package className="w-5 h-5 flex-shrink-0" />
-            <span className="flex-1 text-left">Assets</span>
-            <ChevronDown className={cn('w-4 h-4 transition-transform', assetsOpen ? 'rotate-180' : '')} />
-          </button>
+          </div>
+        )}
 
-          {assetsOpen && (
-            <div className="ml-4 mt-1 space-y-0.5 border-l border-slate-700/50 pl-3">
-              {assetsSubNav.map((item) => (
-                <NavLink
-                  key={item.name}
-                  to={item.href}
-                  onClick={onClose}
-                  className={({ isActive }) =>
-                    cn(
-                      'flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
-                      isActive
-                        ? 'bg-slate-700/70 text-white'
-                        : 'text-slate-400 hover:bg-slate-700/50 hover:text-slate-200'
-                    )
-                  }
-                  data-testid={`nav-${item.name.toLowerCase().replace(/\s+/g, '-')}`}
-                >
-                  <item.icon className="w-4 h-4 flex-shrink-0" />
-                  {item.name}
-                </NavLink>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {bottomNavigation.map((item) => (
+        {visibleBottomNav.map((item) => (
           <NavLink
             key={item.name}
             to={item.href}
@@ -166,22 +182,24 @@ const Sidebar = ({ onClose }) => {
 
       {/* Bottom Section */}
       <div className="border-t border-slate-700/50 p-3">
-        <NavLink
-          to="/settings"
-          onClick={onClose}
-          className={({ isActive }) =>
-            cn(
-              'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors mb-1',
-              isActive
-                ? 'bg-slate-700/70 text-white'
-                : 'text-slate-400 hover:bg-slate-700/50 hover:text-white'
-            )
-          }
-          data-testid="nav-settings"
-        >
-          <Settings className="w-5 h-5" />
-          Settings
-        </NavLink>
+        {!isZoneManager && (
+          <NavLink
+            to="/settings"
+            onClick={onClose}
+            className={({ isActive }) =>
+              cn(
+                'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors mb-1',
+                isActive
+                  ? 'bg-slate-700/70 text-white'
+                  : 'text-slate-400 hover:bg-slate-700/50 hover:text-white'
+              )
+            }
+            data-testid="nav-settings"
+          >
+            <Settings className="w-5 h-5" />
+            Settings
+          </NavLink>
+        )}
 
         <div className="mt-3 pt-3 border-t border-slate-700/50">
           <div className="flex items-center justify-between px-3 py-2">

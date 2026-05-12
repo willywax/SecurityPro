@@ -179,10 +179,22 @@ async def get_sites(
     token_data: dict = Depends(get_token_data)
 ):
     """Get all sites with pagination and filters"""
+    from middleware.zone_scope import get_zone_ids_for_user
+
     org_id = UUID(token_data.get("org_id"))
+    user_id = UUID(token_data.get("sub"))
+    role = token_data.get("role", "")
 
     # Base query
     query = select(Site).where(Site.org_id == org_id)
+
+    # Zone-based data scoping
+    allowed_zone_ids = await get_zone_ids_for_user(user_id, role, org_id, db)
+    if allowed_zone_ids is not None:
+        scoped_region_ids = select(Region.id).where(
+            Region.zone_id.in_(allowed_zone_ids), Region.org_id == org_id
+        )
+        query = query.where(Site.region_id.in_(scoped_region_ids))
 
     # Apply filters
     if search:

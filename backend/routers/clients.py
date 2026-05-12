@@ -138,10 +138,29 @@ async def get_clients(
     token_data: dict = Depends(get_token_data)
 ):
     """Get all clients with pagination and filters"""
+    from middleware.zone_scope import get_zone_ids_for_user
+    from models.site import Site
+    from models.zone import Region
+
     org_id = UUID(token_data.get("org_id"))
+    user_id = UUID(token_data.get("sub"))
+    role = token_data.get("role", "")
 
     # Base query
     query = select(Client).where(Client.org_id == org_id)
+
+    # Zone-based data scoping — clients with at least one site in the user's zones
+    allowed_zone_ids = await get_zone_ids_for_user(user_id, role, org_id, db)
+    if allowed_zone_ids is not None:
+        scoped_region_ids = select(Region.id).where(
+            Region.zone_id.in_(allowed_zone_ids), Region.org_id == org_id
+        )
+        scoped_client_ids = (
+            select(Site.client_id)
+            .where(Site.region_id.in_(scoped_region_ids), Site.org_id == org_id)
+            .distinct()
+        )
+        query = query.where(Client.id.in_(scoped_client_ids))
 
     # Apply filters
     if search:

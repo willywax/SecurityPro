@@ -3,7 +3,12 @@
     "allow": [
       "Bash(xargs grep:*)",
       "Bash(grep -r \"branch_id\\\\|Branch\" /c/Users/LENOVO/Documents/PROGRAMMING/SRCOps/SecurityPro/backend/models --include=*.py)",
-      "Bash(grep -r \"class.*Router\\\\|router.*=\" /c/Users/LENOVO/Documents/PROGRAMMING/SRCOps/SecurityPro/backend/routers --include=*.py)"
+      "Bash(grep -r \"class.*Router\\\\|router.*=\" /c/Users/LENOVO/Documents/PROGRAMMING/SRCOps/SecurityPro/backend/routers --include=*.py)",
+      "Bash(python -m alembic --version)",
+      "Bash(venv\\\\Scripts\\\\alembic.exe --version)",
+      "Bash(venv/Scripts/pip.exe list *)",
+      "Bash(venv/Scripts/pip.exe install *)",
+      "Bash(venv/Scripts/alembic.exe current *)"
     ]
   }
 }

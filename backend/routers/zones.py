@@ -132,10 +132,21 @@ async def list_zones(
     db: AsyncSession = Depends(get_db),
     token_data: dict = Depends(get_token_data),
 ):
+    from middleware.zone_scope import get_zone_ids_for_user
+
     org_id = UUID(token_data["org_id"])
+    user_id = UUID(token_data["sub"])
+    role = token_data.get("role", "")
+
     query = select(Zone).where(Zone.org_id == org_id)
     if status_filter:
         query = query.where(Zone.status == status_filter)
+
+    # Zone-based scoping — managers only see their assigned zones
+    allowed_zone_ids = await get_zone_ids_for_user(user_id, role, org_id, db)
+    if allowed_zone_ids is not None:
+        query = query.where(Zone.id.in_(allowed_zone_ids))
+
     result = await db.execute(query.order_by(Zone.zone_name))
     zones = result.scalars().all()
     return [await _build_zone_response(z, org_id, db) for z in zones]

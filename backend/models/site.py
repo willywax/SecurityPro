@@ -30,3 +30,4 @@ class Site(BaseModel):
     # Relationships
     client = relationship("Client", back_populates="sites")
     region_obj = relationship("Region", back_populates="sites", foreign_keys=[region_id])
+    allocations = relationship("EmployeeSiteAllocation", back_populates="site", foreign_keys="EmployeeSiteAllocation.site_id")

@@ -79,6 +79,7 @@ const EmployeeList = () => {
   const [search, setSearch] = useState(searchParams.get('search') || '');
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all');
+  const [availabilityFilter, setAvailabilityFilter] = useState(searchParams.get('availability') || 'all');
   const [regionFilter, setRegionFilter] = useState(searchParams.get('region') || 'all');
   const [zoneFilter, setZoneFilter] = useState(searchParams.get('zone') || 'all');
   const [page, setPage] = useState(Number(searchParams.get('page') || 1));
@@ -101,20 +102,22 @@ const EmployeeList = () => {
     const params = new URLSearchParams();
     if (search) params.set('search', search);
     if (statusFilter !== 'all') params.set('status', statusFilter);
+    if (availabilityFilter !== 'all') params.set('availability', availabilityFilter);
     if (zoneFilter !== 'all') params.set('zone', zoneFilter);
     if (regionFilter !== 'all') params.set('region', regionFilter);
     if (page > 1) params.set('page', String(page));
     setSearchParams(params);
-  }, [page, regionFilter, search, setSearchParams, statusFilter, zoneFilter]);
+  }, [availabilityFilter, page, regionFilter, search, setSearchParams, statusFilter, zoneFilter]);
 
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ['employees', { page, pageSize, search: debouncedSearch, statusFilter, regionFilter, zoneFilter }],
+    queryKey: ['employees', { page, pageSize, search: debouncedSearch, statusFilter, availabilityFilter, regionFilter, zoneFilter }],
     queryFn: () =>
       employeeService.getAll({
         page,
         page_size: pageSize,
         search: debouncedSearch || undefined,
         status_filter: statusFilter !== 'all' ? statusFilter : undefined,
+        availability_status: availabilityFilter !== 'all' ? availabilityFilter : undefined,
         region_id: regionFilter !== 'all' ? regionFilter : undefined,
         zone_id: regionFilter === 'all' && zoneFilter !== 'all' ? zoneFilter : undefined,
       }),
@@ -161,9 +164,22 @@ const EmployeeList = () => {
           <SelectContent>
             <SelectItem value="all">All Statuses</SelectItem>
             <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="inactive">Inactive</SelectItem>
+            <SelectItem value="rehired">Rehired</SelectItem>
             <SelectItem value="on_leave">On Leave</SelectItem>
+            <SelectItem value="inactive">Inactive</SelectItem>
+            <SelectItem value="resigned">Resigned</SelectItem>
             <SelectItem value="terminated">Terminated</SelectItem>
+            <SelectItem value="absconded">Absconded</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={availabilityFilter} onValueChange={(value) => { setAvailabilityFilter(value); setPage(1); }}>
+          <SelectTrigger className="w-full sm:w-[160px]">
+            <SelectValue placeholder="All Availability" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Availability</SelectItem>
+            <SelectItem value="available">Available</SelectItem>
+            <SelectItem value="allocated">Allocated</SelectItem>
           </SelectContent>
         </Select>
         <Select value={zoneFilter} onValueChange={(value) => { setZoneFilter(value); setRegionFilter('all'); setPage(1); }}>
@@ -202,11 +218,11 @@ const EmployeeList = () => {
             <User className="w-12 h-12 text-slate-300 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-slate-900 mb-1">No employees found</h3>
             <p className="text-slate-500 text-sm mb-4">
-              {search || statusFilter !== 'all' || zoneFilter !== 'all' || regionFilter !== 'all'
+              {search || statusFilter !== 'all' || availabilityFilter !== 'all' || zoneFilter !== 'all' || regionFilter !== 'all'
                 ? 'Try adjusting your search or filters'
                 : 'Get started by adding your first employee'}
             </p>
-            {!search && statusFilter === 'all' && zoneFilter === 'all' && regionFilter === 'all' && (
+            {!search && statusFilter === 'all' && availabilityFilter === 'all' && zoneFilter === 'all' && regionFilter === 'all' && (
               <Link to="/employees/new">
                 <Button className="bg-[#0F172A] hover:bg-slate-800">
                   <Plus className="w-4 h-4 mr-2" />
@@ -226,6 +242,8 @@ const EmployeeList = () => {
                   <TableHead className="font-semibold">ID / Guard No</TableHead>
                   <TableHead className="font-semibold">Contact</TableHead>
                   <TableHead className="font-semibold">Region / Zone</TableHead>
+                  <TableHead className="font-semibold">Current Site</TableHead>
+                  <TableHead className="font-semibold">Availability</TableHead>
                   <TableHead className="font-semibold">Status</TableHead>
                 </TableRow>
               </TableHeader>
@@ -258,6 +276,16 @@ const EmployeeList = () => {
                           {employee.zone_name && <p className="text-slate-400 text-xs">{employee.zone_name}</p>}
                         </div>
                       ) : '-'}
+                    </TableCell>
+                    <TableCell>
+                      {employee.current_site_name
+                        ? <p className="text-slate-800 text-sm">{employee.current_site_name}</p>
+                        : <span className="text-slate-400 text-sm">—</span>}
+                    </TableCell>
+                    <TableCell>
+                      {employee.availability_status === 'allocated'
+                        ? <Badge className="bg-blue-100 text-blue-700 border-blue-200 font-normal">Allocated</Badge>
+                        : <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 font-normal">Available</Badge>}
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline" className={statusColors[employee.employment_status]}>
