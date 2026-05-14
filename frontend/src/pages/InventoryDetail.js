@@ -61,7 +61,7 @@ const InventoryDetail = () => {
 
   const employeesQuery = useQuery({
     queryKey: ['employees', 'issuance-options'],
-    queryFn: () => employeeService.getAll({ page: 1, page_size: 100, status_filter: 'active' }),
+    queryFn: () => employeeService.getAll({ page: 1, page_size: 200, status_in: 'active,rehired,allocated,available' }),
   });
 
   const sitesQuery = useQuery({

@@ -23,6 +23,7 @@ import {
   UserCog,
   ArrowRightLeft,
   ClipboardList,
+  BarChart3,
 } from 'lucide-react';
 import { USER_MANAGEMENT_ROLES } from '@/constants/userRoles';
 
@@ -45,6 +46,7 @@ const topNavigation = [
   { name: 'Regions', href: '/regions', icon: Map, allAccess: true, zoneManager: false },
   { name: 'Allocations', href: '/allocations', icon: ArrowRightLeft, allAccess: true, zoneManager: true },
   { name: 'Daily Logs', href: '/daily-logs', icon: ClipboardList, allAccess: true, zoneManager: true },
+  { name: 'Reports', href: '/reports/employees', icon: BarChart3, allAccess: true, zoneManager: true },
 ];
 
 const bottomNavigation = [

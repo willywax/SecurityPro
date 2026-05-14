@@ -20,10 +20,11 @@ import {
 } from '../components/ui/table';
 import { Badge } from '../components/ui/badge';
 import { Card, CardContent } from '../components/ui/card';
-import { Search, Plus, ChevronLeft, ChevronRight, User, Phone, Mail, Loader2 } from 'lucide-react';
+import { Search, Plus, ChevronLeft, ChevronRight, User, Phone, Mail, Loader2, AlertTriangle, X } from 'lucide-react';
 import employeeService from '@/services/employeeService';
 import regionService from '@/services/regionService';
 import zoneService from '@/services/zoneService';
+import reportService from '@/services/reportService';
 import { API_BASE_URL } from '@/lib/api';
 
 const statusColors = {
@@ -77,6 +78,21 @@ const EmployeeList = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(searchParams.get('search') || '');
+  const [bannerDismissed, setBannerDismissed] = useState(
+    () => sessionStorage.getItem('contractExpiryDismissed') === '1'
+  );
+
+  const contractExpiryQuery = useQuery({
+    queryKey: ['contract-expiry'],
+    queryFn: () => reportService.getContractExpiry(),
+    staleTime: 5 * 60 * 1000,
+  });
+  const expiryCount = contractExpiryQuery.data?.within_30_days || 0;
+
+  const dismissBanner = () => {
+    sessionStorage.setItem('contractExpiryDismissed', '1');
+    setBannerDismissed(true);
+  };
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all');
   const [availabilityFilter, setAvailabilityFilter] = useState(searchParams.get('availability') || 'all');
@@ -141,6 +157,32 @@ const EmployeeList = () => {
           </Button>
         </Link>
       </div>
+
+      {/* Contract expiry banner */}
+      {!bannerDismissed && expiryCount > 0 && (
+        <div className="flex items-center justify-between gap-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span className="text-sm text-amber-800">
+              <strong>{expiryCount}</strong> contract{expiryCount !== 1 ? 's' : ''} expiring in the next 30 days
+            </span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => navigate('/reports/employees?contractExpiry=30')}
+              className="text-xs font-medium text-amber-700 underline hover:text-amber-900"
+            >
+              View Contracts
+            </button>
+            <button
+              onClick={dismissBanner}
+              className="text-amber-500 hover:text-amber-700"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1 max-w-md">

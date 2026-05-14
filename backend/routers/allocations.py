@@ -459,7 +459,51 @@ async def get_site_guards(
         ).order_by(EmployeeSiteAllocation.start_date)
     )
     allocs = result.scalars().all()
-    return [await _build_allocation_response(a, db, site=site) for a in allocs]
+
+    employee_ids = {a.employee_id for a in allocs}
+    zone_ids_set = {a.zone_id for a in allocs if a.zone_id}
+
+    employees_map: dict = {}
+    if employee_ids:
+        e_res = await db.execute(select(Employee).where(Employee.id.in_(employee_ids)))
+        for e in e_res.scalars().all():
+            employees_map[e.id] = e
+
+    zones_map: dict = {}
+    if zone_ids_set:
+        z_res = await db.execute(select(Zone).where(Zone.id.in_(zone_ids_set)))
+        for z in z_res.scalars().all():
+            zones_map[z.id] = z
+
+    out = []
+    for a in allocs:
+        emp = employees_map.get(a.employee_id)
+        zone_obj = zones_map.get(a.zone_id) if a.zone_id else None
+        photo_url = None
+        if emp and emp.photo_path:
+            try:
+                from services.storage_service import storage_service
+                photo_url = storage_service.get_public_url(emp.photo_path)
+            except Exception:
+                pass
+        out.append({
+            "id": a.id,
+            "employee_id": a.employee_id,
+            "employee_name": f"{emp.first_name} {emp.last_name}".strip() if emp else None,
+            "guard_no": emp.guard_no if emp else None,
+            "phone": emp.phone_1 if emp else None,
+            "photo_url": photo_url,
+            "site_id": a.site_id,
+            "site_name": site.site_name,
+            "zone_id": a.zone_id,
+            "zone_name": zone_obj.zone_name if zone_obj else None,
+            "start_date": a.start_date,
+            "end_date": a.end_date,
+            "status": a.status,
+            "notes": a.notes,
+            "created_at": a.created_at,
+        })
+    return out
 
 
 @router.get("/employees/{employee_id}/history", response_model=List[AllocationResponse])
@@ -481,7 +525,52 @@ async def get_employee_allocation_history(
         ).order_by(EmployeeSiteAllocation.start_date.desc())
     )
     allocs = result.scalars().all()
-    return [await _build_allocation_response(a, db, employee=employee) for a in allocs]
+
+    site_ids_set = {a.site_id for a in allocs}
+    zone_ids_set = {a.zone_id for a in allocs if a.zone_id}
+
+    sites_map: dict = {}
+    if site_ids_set:
+        s_res = await db.execute(select(Site).where(Site.id.in_(site_ids_set)))
+        for s in s_res.scalars().all():
+            sites_map[s.id] = s
+
+    zones_map: dict = {}
+    if zone_ids_set:
+        z_res = await db.execute(select(Zone).where(Zone.id.in_(zone_ids_set)))
+        for z in z_res.scalars().all():
+            zones_map[z.id] = z
+
+    photo_url = None
+    if employee and employee.photo_path:
+        try:
+            from services.storage_service import storage_service
+            photo_url = storage_service.get_public_url(employee.photo_path)
+        except Exception:
+            pass
+
+    out = []
+    for a in allocs:
+        site_obj = sites_map.get(a.site_id)
+        zone_obj = zones_map.get(a.zone_id) if a.zone_id else None
+        out.append({
+            "id": a.id,
+            "employee_id": a.employee_id,
+            "employee_name": f"{employee.first_name} {employee.last_name}".strip() if employee else None,
+            "guard_no": employee.guard_no if employee else None,
+            "phone": employee.phone_1 if employee else None,
+            "photo_url": photo_url,
+            "site_id": a.site_id,
+            "site_name": site_obj.site_name if site_obj else None,
+            "zone_id": a.zone_id,
+            "zone_name": zone_obj.zone_name if zone_obj else None,
+            "start_date": a.start_date,
+            "end_date": a.end_date,
+            "status": a.status,
+            "notes": a.notes,
+            "created_at": a.created_at,
+        })
+    return out
 
 
 @router.get("/employees/{employee_id}/transfers", response_model=List[TransferResponse])
@@ -503,7 +592,35 @@ async def get_employee_transfers(
         ).order_by(GuardTransfer.transfer_date.desc())
     )
     transfers = result.scalars().all()
-    return [await _build_transfer_response(t, db) for t in transfers]
+
+    all_site_ids = (
+        {t.from_site_id for t in transfers if t.from_site_id}
+        | {t.to_site_id for t in transfers if t.to_site_id}
+    )
+    sites_map: dict = {}
+    if all_site_ids:
+        s_res = await db.execute(select(Site).where(Site.id.in_(all_site_ids)))
+        for s in s_res.scalars().all():
+            sites_map[s.id] = s
+
+    out = []
+    for t in transfers:
+        from_site = sites_map.get(t.from_site_id) if t.from_site_id else None
+        to_site = sites_map.get(t.to_site_id) if t.to_site_id else None
+        out.append({
+            "id": t.id,
+            "employee_id": t.employee_id,
+            "employee_name": f"{employee.first_name} {employee.last_name}".strip() if employee else None,
+            "from_site_id": t.from_site_id,
+            "from_site_name": from_site.site_name if from_site else None,
+            "to_site_id": t.to_site_id,
+            "to_site_name": to_site.site_name if to_site else None,
+            "transfer_date": t.transfer_date,
+            "reason": t.reason,
+            "status": t.status,
+            "created_at": t.created_at,
+        })
+    return out
 
 
 @router.get("/zones/{zone_id}/overview", response_model=List[ZoneSiteAllocationSummary])
@@ -540,17 +657,68 @@ async def get_zone_allocation_overview(
         for c in c_res.scalars().all():
             clients_map[c.id] = c
 
+    # Batch-fetch all active allocations for all sites in one query
+    site_ids_list = [s.id for s in sites]
+    all_allocs_result = await db.execute(
+        select(EmployeeSiteAllocation).where(
+            EmployeeSiteAllocation.site_id.in_(site_ids_list),
+            EmployeeSiteAllocation.status == "active",
+        )
+    )
+    all_allocs = all_allocs_result.scalars().all()
+
+    allocs_by_site: dict = {}
+    for alloc in all_allocs:
+        allocs_by_site.setdefault(alloc.site_id, []).append(alloc)
+
+    # Batch-load employees and zones referenced by allocations
+    alloc_employee_ids = {a.employee_id for a in all_allocs}
+    alloc_zone_ids = {a.zone_id for a in all_allocs if a.zone_id}
+
+    alloc_employees_map: dict = {}
+    if alloc_employee_ids:
+        ae_res = await db.execute(select(Employee).where(Employee.id.in_(alloc_employee_ids)))
+        for e in ae_res.scalars().all():
+            alloc_employees_map[e.id] = e
+
+    alloc_zones_map: dict = {}
+    if alloc_zone_ids:
+        az_res = await db.execute(select(Zone).where(Zone.id.in_(alloc_zone_ids)))
+        for z in az_res.scalars().all():
+            alloc_zones_map[z.id] = z
+
     out = []
     for site in sites:
-        allocs_result = await db.execute(
-            select(EmployeeSiteAllocation).where(
-                EmployeeSiteAllocation.site_id == site.id,
-                EmployeeSiteAllocation.status == "active",
-            )
-        )
-        allocs = allocs_result.scalars().all()
-        guard_list = [await _build_allocation_response(a, db, site=site) for a in allocs]
+        site_allocs = allocs_by_site.get(site.id, [])
         client = clients_map.get(site.client_id)
+        guard_list = []
+        for a in site_allocs:
+            emp = alloc_employees_map.get(a.employee_id)
+            zone_obj = alloc_zones_map.get(a.zone_id) if a.zone_id else None
+            photo_url = None
+            if emp and emp.photo_path:
+                try:
+                    from services.storage_service import storage_service
+                    photo_url = storage_service.get_public_url(emp.photo_path)
+                except Exception:
+                    pass
+            guard_list.append({
+                "id": a.id,
+                "employee_id": a.employee_id,
+                "employee_name": f"{emp.first_name} {emp.last_name}".strip() if emp else None,
+                "guard_no": emp.guard_no if emp else None,
+                "phone": emp.phone_1 if emp else None,
+                "photo_url": photo_url,
+                "site_id": a.site_id,
+                "site_name": site.site_name,
+                "zone_id": a.zone_id,
+                "zone_name": zone_obj.zone_name if zone_obj else None,
+                "start_date": a.start_date,
+                "end_date": a.end_date,
+                "status": a.status,
+                "notes": a.notes,
+                "created_at": a.created_at,
+            })
         out.append({
             "site_id": site.id,
             "site_name": site.site_name,

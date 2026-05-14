@@ -9,8 +9,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
-import { ArrowLeft, Loader2, Save, Trash2, Edit, MapPin, Building2, Users, X, Plus, ArrowRightLeft, UserMinus } from 'lucide-react';
+import { ArrowLeft, Loader2, Save, Trash2, Edit, MapPin, Building2, Users, X, Plus, ArrowRightLeft, UserMinus, Check, ChevronsUpDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import clientService from '@/services/clientService';
 import siteService from '@/services/siteService';
 import regionService from '@/services/regionService';
@@ -43,7 +46,18 @@ const SiteDetail = () => {
   // Remove confirm
   const [removeTarget, setRemoveTarget] = useState(null);
 
-  const clientsQuery = useQuery({ queryKey: ['clients', 'site-form'], queryFn: () => clientService.getAll({ page: 1, page_size: 100 }) });
+  // Client combobox
+  const [clientComboOpen, setClientComboOpen] = useState(false);
+  const [clientSearch, setClientSearch] = useState('');
+  const [selectedClientLabel, setSelectedClientLabel] = useState('');
+
+  const clientSearchQuery = useQuery({
+    queryKey: ['clients', 'search', clientSearch],
+    queryFn: () => clientService.getAll({ page: 1, page_size: 20, search: clientSearch }),
+    enabled: clientSearch.length >= 2,
+    staleTime: 30000,
+  });
+  const searchedClients = clientSearch.length >= 2 ? (clientSearchQuery.data?.data || []) : [];
   const regionsQuery = useQuery({ queryKey: ['regions', 'site-form'], queryFn: () => regionService.getAll({ status_filter: 'active' }) });
   const regions = Array.isArray(regionsQuery.data) ? regionsQuery.data : regionsQuery.data?.data || [];
   const regionPlaceholder = regionsQuery.isLoading ? 'Loading regions...' : regionsQuery.isError ? 'Failed to load regions' : regions.length === 0 ? 'No active regions available' : 'Select region';
@@ -61,7 +75,12 @@ const SiteDetail = () => {
   });
 
   useEffect(() => {
-    if (siteQuery.data) setFormData(siteQuery.data);
+    if (siteQuery.data) {
+      setFormData(siteQuery.data);
+      if (siteQuery.data.client_name) {
+        setSelectedClientLabel(siteQuery.data.client_name);
+      }
+    }
   }, [siteQuery.data]);
 
   const updateField = (field, value) => {
@@ -158,7 +177,6 @@ const SiteDetail = () => {
   if (siteQuery.isError) return <Card><CardContent className="py-12 text-center text-red-600">{formatApiError(siteQuery.error, 'Failed to load site')}</CardContent></Card>;
 
   const site = siteQuery.data;
-  const clients = clientsQuery.data?.data || [];
   const allSites = (allSitesQuery.data?.data || []).filter(s => s.id !== id);
   const filteredSites = siteSearch ? allSites.filter(s => s.site_name.toLowerCase().includes(siteSearch.toLowerCase())) : allSites;
   const allocatedCount = guardsQuery.data?.length ?? 0;
@@ -167,10 +185,57 @@ const SiteDetail = () => {
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div className="space-y-2 md:col-span-2">
         <Label>Client</Label>
-        <Select value={formData.client_id} onValueChange={(v) => updateField('client_id', v)}>
-          <SelectTrigger className={errors.client_id ? 'border-red-500' : ''}><SelectValue placeholder="Select client" /></SelectTrigger>
-          <SelectContent>{clients.map((c) => <SelectItem key={c.id} value={c.id}>{c.client_name}</SelectItem>)}</SelectContent>
-        </Select>
+        <Popover open={clientComboOpen} onOpenChange={setClientComboOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              type="button"
+              variant="outline"
+              className={cn('w-full justify-between font-normal', !formData.client_id && 'text-slate-500', errors.client_id ? 'border-red-500' : '')}
+            >
+              <span className="truncate">{formData.client_id ? selectedClientLabel || 'Selected' : 'Search clients...'}</span>
+              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+            <Command>
+              <CommandInput
+                placeholder="Type 2+ characters to search..."
+                value={clientSearch}
+                onValueChange={setClientSearch}
+              />
+              <CommandList>
+                {clientSearch.length < 2 ? (
+                  <CommandEmpty>Type at least 2 characters to search</CommandEmpty>
+                ) : clientSearchQuery.isLoading ? (
+                  <CommandEmpty>Loading...</CommandEmpty>
+                ) : searchedClients.length === 0 ? (
+                  <CommandEmpty>No clients found</CommandEmpty>
+                ) : (
+                  <CommandGroup>
+                    {searchedClients.map((c) => (
+                      <CommandItem
+                        key={c.id}
+                        value={`${c.client_name} ${c.client_id || ''}`}
+                        onSelect={() => {
+                          updateField('client_id', c.id);
+                          setSelectedClientLabel(`${c.client_name}${c.client_id ? ` (${c.client_id})` : ''}`);
+                          setClientComboOpen(false);
+                          setClientSearch('');
+                        }}
+                      >
+                        <Check className={cn('mr-2 h-4 w-4 shrink-0', formData.client_id === c.id ? 'opacity-100' : 'opacity-0')} />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{c.client_name}</p>
+                          {c.client_id && <p className="text-xs text-slate-500">{c.client_id}</p>}
+                        </div>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                )}
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
         {errors.client_id && <p className="text-sm text-red-500">{errors.client_id}</p>}
       </div>
       <div className="space-y-2 md:col-span-2"><Label>Site Name</Label><Input value={formData.site_name} onChange={(e) => updateField('site_name', e.target.value)} className={errors.site_name ? 'border-red-500' : ''} />{errors.site_name && <p className="text-sm text-red-500">{errors.site_name}</p>}</div>

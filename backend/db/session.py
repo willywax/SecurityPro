@@ -22,9 +22,12 @@ if "sslmode=require" in DATABASE_URL:
 
 engine = create_async_engine(
     DATABASE_URL,
-    echo=True,  # Set False in production for better performance
+    echo=False,
     future=True,
-    pool_pre_ping=True,  # Verify connections before using them
+    pool_pre_ping=True,
+    pool_size=5,
+    max_overflow=10,
+    pool_recycle=300,
     connect_args=connect_args,
 )
 

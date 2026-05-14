@@ -149,7 +149,84 @@ async def list_zones(
 
     result = await db.execute(query.order_by(Zone.zone_name))
     zones = result.scalars().all()
-    return [await _build_zone_response(z, org_id, db) for z in zones]
+
+    if not zones:
+        return []
+
+    from models.site import Site as SiteModel
+    zone_ids_list = [z.id for z in zones]
+
+    # Batch region counts per zone
+    region_count_rows = (await db.execute(
+        select(Region.zone_id, func.count().label("cnt"))
+        .where(Region.zone_id.in_(zone_ids_list), Region.org_id == org_id)
+        .group_by(Region.zone_id)
+    )).all()
+    region_count_map = {row.zone_id: row.cnt for row in region_count_rows}
+
+    # Fetch all region IDs for all zones to resolve employee/site counts
+    region_rows = (await db.execute(
+        select(Region.id, Region.zone_id)
+        .where(Region.zone_id.in_(zone_ids_list), Region.org_id == org_id)
+    )).all()
+    region_to_zone: dict = {row.id: row.zone_id for row in region_rows}
+    all_region_ids = list(region_to_zone.keys())
+
+    emp_count_map: dict = {zid: 0 for zid in zone_ids_list}
+    site_count_map: dict = {zid: 0 for zid in zone_ids_list}
+
+    if all_region_ids:
+        emp_rows = (await db.execute(
+            select(Employee.region_id, func.count().label("cnt"))
+            .where(Employee.region_id.in_(all_region_ids), Employee.org_id == org_id)
+            .group_by(Employee.region_id)
+        )).all()
+        for row in emp_rows:
+            zid = region_to_zone.get(row.region_id)
+            if zid:
+                emp_count_map[zid] = emp_count_map.get(zid, 0) + row.cnt
+
+        site_rows = (await db.execute(
+            select(SiteModel.region_id, func.count().label("cnt"))
+            .where(SiteModel.region_id.in_(all_region_ids), SiteModel.org_id == org_id)
+            .group_by(SiteModel.region_id)
+        )).all()
+        for row in site_rows:
+            zid = region_to_zone.get(row.region_id)
+            if zid:
+                site_count_map[zid] = site_count_map.get(zid, 0) + row.cnt
+
+    # Batch managers with employee names in one join query
+    manager_rows = (await db.execute(
+        select(ZoneManager, Employee)
+        .join(Employee, ZoneManager.employee_id == Employee.id)
+        .where(ZoneManager.zone_id.in_(zone_ids_list))
+    )).all()
+    managers_map: dict = {zid: [] for zid in zone_ids_list}
+    for zm, emp in manager_rows:
+        managers_map[zm.zone_id].append({
+            "id": zm.id,
+            "employee_id": zm.employee_id,
+            "employee_name": f"{emp.first_name} {emp.last_name}",
+            "assigned_date": zm.assigned_date,
+            "end_date": zm.end_date,
+            "active": zm.active,
+        })
+
+    return [
+        {
+            "id": z.id,
+            "zone_name": z.zone_name,
+            "notes": z.notes,
+            "status": z.status,
+            "created_at": z.created_at,
+            "region_count": region_count_map.get(z.id, 0),
+            "employee_count": emp_count_map.get(z.id, 0),
+            "site_count": site_count_map.get(z.id, 0),
+            "managers": managers_map.get(z.id, []),
+        }
+        for z in zones
+    ]
 
 
 @router.post("", response_model=ZoneResponse, status_code=status.HTTP_201_CREATED)

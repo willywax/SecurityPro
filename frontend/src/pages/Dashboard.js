@@ -2,20 +2,24 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
-import { 
-  Users, 
-  Building2, 
-  MapPin, 
-  Package, 
+import {
+  Users,
+  Building2,
+  MapPin,
+  Package,
   TrendingUp,
   Clock,
   AlertTriangle,
   CheckCircle,
   Loader2,
   UserCog,
+  FileWarning,
+  UserMinus,
 } from 'lucide-react';
 import dashboardService from '@/services/dashboardService';
+import reportService from '@/services/reportService';
 import { USER_MANAGEMENT_ROLES } from '@/constants/userRoles';
+import ZoneManagerDashboard from './ZoneManagerDashboard';
 
 const activityIconMap = {
   employee: { icon: CheckCircle, containerClass: 'bg-emerald-100', iconClass: 'text-emerald-600' },
@@ -43,13 +47,31 @@ const formatRelativeTime = (value) => {
   return formatter.format(diffDays, 'day');
 };
 
+const ALL_ACCESS_ROLES = new Set(['admin', 'director', 'hr']);
+
 const Dashboard = () => {
   const { user, organization } = useAuth();
+  const isZoneManager = user?.role === 'zone_manager';
+
+  // All hooks must be called unconditionally — enabled flags gate the actual fetches
   const dashboardQuery = useQuery({
     queryKey: ['dashboard', 'summary'],
     queryFn: () => dashboardService.getSummary(),
+    enabled: !isZoneManager,
   });
 
+  const contractExpiryQuery = useQuery({
+    queryKey: ['contract-expiry'],
+    queryFn: () => reportService.getContractExpiry(),
+    enabled: ALL_ACCESS_ROLES.has(user?.role) && !isZoneManager,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  if (isZoneManager) {
+    return <ZoneManagerDashboard />;
+  }
+
+  const expiry7 = contractExpiryQuery.data?.within_7_days || 0;
   const stats = dashboardQuery.data?.stats;
   const recentActivities = dashboardQuery.data?.recent_activity || [];
   const canManageUsers = USER_MANAGEMENT_ROLES.has(user?.role);
@@ -165,14 +187,39 @@ const Dashboard = () => {
         </Card>
       </div>
 
-      {/* Placeholder for future modules */}
+      {/* Contract expiry alert — admin / director / hr only */}
+      {ALL_ACCESS_ROLES.has(user?.role) && expiry7 > 0 && (
+        <Link to="/reports/employees?contractExpiry=7">
+          <div className="flex items-center gap-3 px-5 py-4 bg-red-50 border border-red-200 rounded-xl hover:border-red-300 transition-colors cursor-pointer">
+            <div className="p-2 bg-red-100 rounded-lg shrink-0">
+              <FileWarning className="w-5 h-5 text-red-600" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-red-800">
+                {expiry7} contract{expiry7 !== 1 ? 's' : ''} expire within 7 days
+              </p>
+              <p className="text-xs text-red-600 mt-0.5">Click to view employees with expiring contracts</p>
+            </div>
+          </div>
+        </Link>
+      )}
+
+      {/* Bottom stat widgets */}
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="bg-white rounded-xl border border-slate-200 p-6">
           <p className="text-sm text-slate-500">Active Users</p>
           <p className="mt-2 text-3xl font-bold text-slate-900">{stats?.active_users ?? 0}</p>
           <p className="mt-1 text-xs text-slate-400">Accounts currently enabled for access</p>
         </div>
-        <div className="bg-white rounded-xl border border-dashed border-slate-300 p-6 lg:col-span-2">
+        <div className="bg-white rounded-xl border border-slate-200 p-6">
+          <div className="flex items-center gap-2 mb-2">
+            <UserMinus className="w-4 h-4 text-amber-500" />
+            <p className="text-sm text-slate-500">Unassigned Guards</p>
+          </div>
+          <p className="mt-1 text-3xl font-bold text-slate-900">{stats?.unassigned_guards ?? 0}</p>
+          <p className="mt-1 text-xs text-slate-400">Active guards with no site allocation</p>
+        </div>
+        <div className="bg-white rounded-xl border border-dashed border-slate-300 p-6">
           <p className="text-sm font-medium text-slate-900">More dashboard widgets can plug in here next.</p>
           <p className="mt-2 text-sm text-slate-500">
             Payroll summary, overdue contracts, invoice collections, and zone performance are good next candidates.

@@ -38,6 +38,7 @@ from routers import users
 from routers import files
 from routers import allocations
 from routers import daily_logs
+from routers import reports
 
 
 async def run_contract_expiry_check():
@@ -181,6 +182,7 @@ api_router.include_router(users.router)
 api_router.include_router(files.router)
 api_router.include_router(allocations.router)
 api_router.include_router(daily_logs.router)
+api_router.include_router(reports.router)
 
 # Include the router in the main app
 app.include_router(api_router)

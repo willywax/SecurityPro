@@ -586,9 +586,10 @@ async def create_employee(
 @router.get("", response_model=EmployeeListResponse)
 async def get_employees(
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=100),
+    page_size: int = Query(50, ge=1, le=500),
     search: Optional[str] = None,
     status_filter: Optional[EmploymentStatus] = None,
+    status_in: Optional[str] = None,
     availability_status: Optional[AvailabilityStatus] = None,
     region_id: Optional[UUID] = None,
     zone_id: Optional[UUID] = None,
@@ -627,6 +628,10 @@ async def get_employees(
         )
     if status_filter:
         query = query.where(Employee.employment_status == status_filter)
+    elif status_in:
+        statuses = [s.strip() for s in status_in.split(',') if s.strip()]
+        if statuses:
+            query = query.where(Employee.employment_status.in_(statuses))
     if availability_status:
         query = query.where(Employee.availability_status == availability_status)
     if region_id:

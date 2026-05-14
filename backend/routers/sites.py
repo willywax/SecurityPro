@@ -221,7 +221,45 @@ async def get_sites(
     result = await db.execute(query)
     sites = result.scalars().all()
 
-    site_responses = [await enrich_site(db, s) for s in sites]
+    # Batch-load related data to avoid N+1 queries
+    client_ids = {s.client_id for s in sites if s.client_id}
+    region_ids_set = {s.region_id for s in sites if s.region_id}
+
+    clients_map: dict = {}
+    if client_ids:
+        c_res = await db.execute(select(Client).where(Client.id.in_(client_ids)))
+        for c in c_res.scalars().all():
+            clients_map[c.id] = c
+
+    regions_map: dict = {}
+    zone_ids_set: set = set()
+    if region_ids_set:
+        r_res = await db.execute(select(Region).where(Region.id.in_(region_ids_set)))
+        for r in r_res.scalars().all():
+            regions_map[r.id] = r
+            if r.zone_id:
+                zone_ids_set.add(r.zone_id)
+
+    zones_map: dict = {}
+    if zone_ids_set:
+        z_res = await db.execute(select(Zone).where(Zone.id.in_(zone_ids_set)))
+        for z in z_res.scalars().all():
+            zones_map[z.id] = z
+
+    def _build(site: Site) -> SiteResponse:
+        data = SiteResponse.model_validate(site)
+        client = clients_map.get(site.client_id)
+        if client:
+            data.client_name = client.client_name
+        region = regions_map.get(site.region_id) if site.region_id else None
+        if region:
+            data.region_name = region.region_name
+            zone = zones_map.get(region.zone_id)
+            if zone:
+                data.zone_name = zone.zone_name
+        return data
+
+    site_responses = [_build(s) for s in sites]
 
     return SiteListResponse(
         sites=site_responses,
