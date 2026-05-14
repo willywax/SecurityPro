@@ -1,428 +1,502 @@
 import { useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useQuery, useMutation } from '@tanstack/react-query';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import { Button } from '../components/ui/button';
-import { Checkbox } from '../components/ui/checkbox';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Separator } from '@/components/ui/separator';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../components/ui/select';
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '../components/ui/table';
-import { toast } from 'sonner';
-import { Loader2, Download, Printer, Users, Filter, Columns, Eye } from 'lucide-react';
-import reportService from '@/services/reportService';
+  Check,
+  ChevronsUpDown,
+  X,
+  FileText,
+  Users,
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { useZoneScope } from '@/hooks/useZoneScope';
 import zoneService from '@/services/zoneService';
 import regionService from '@/services/regionService';
 import siteService from '@/services/siteService';
 import clientService from '@/services/clientService';
-import { useZoneScope } from '@/hooks/useZoneScope';
 
-const EMPLOYMENT_STATUSES = [
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const EMPLOYMENT_STATUS_OPTIONS = [
   { value: 'active', label: 'Active' },
   { value: 'rehired', label: 'Rehired' },
   { value: 'inactive', label: 'Inactive' },
   { value: 'terminated', label: 'Terminated' },
   { value: 'resigned', label: 'Resigned' },
   { value: 'absconded', label: 'Absconded' },
-  { value: 'on_leave', label: 'On Leave' },
 ];
 
-const AVAILABILITY_STATUSES = [
+const AVAILABILITY_OPTIONS = [
   { value: 'available', label: 'Available' },
   { value: 'allocated', label: 'Allocated' },
 ];
 
-const CONTRACT_STATUSES = [
+const CONTRACT_STATUS_OPTIONS = [
   { value: 'active', label: 'Active' },
   { value: 'expired', label: 'Expired' },
   { value: 'terminated', label: 'Terminated' },
   { value: 'no_contract', label: 'No Contract' },
 ];
 
-const EXPIRY_OPTIONS = [
-  { value: '', label: 'Any' },
-  { value: '7', label: 'Within 7 days' },
-  { value: '30', label: 'Within 30 days' },
-  { value: '60', label: 'Within 60 days' },
-  { value: '90', label: 'Within 90 days' },
+const EXPIRY_DAYS = [null, 7, 30, 60, 90];
+
+const TRI_STATE = [
+  { label: 'Any', v: null },
+  { label: 'Yes', v: true },
+  { label: 'No', v: false },
 ];
 
-const FIELD_GROUPS = [
-  { key: 'basic', label: 'Basic Info', desc: 'Name, Guard No, Phone, Email' },
-  { key: 'employment', label: 'Employment Details', desc: 'Status, Hire Date, Zone, Region, Current Site' },
-  { key: 'bank_details', label: 'Bank Details', desc: 'Bank, Branch, Account Name & Number' },
-  { key: 'next_of_kin', label: 'Next of Kin', desc: 'Name, Relationship, Phone' },
-  { key: 'references', label: 'References', desc: 'Name, Relationship, Phone' },
-  { key: 'contract', label: 'Current Contract', desc: 'Type, Dates, Salary, Status' },
-  { key: 'assets_issued', label: 'Assets Issued', desc: 'Item name, Quantity, Issue Date' },
-  { key: 'phone_numbers', label: 'Phone Numbers Only', desc: 'Phone 1 and Phone 2 only' },
+const FIELD_CONFIG = [
+  { key: 'basic',        label: 'Basic Info',         desc: 'Name, guard no, phone, email',          defaultOn: true },
+  { key: 'employment',   label: 'Employment Details',  desc: 'Status, hire date, zone, region, site', defaultOn: true },
+  { key: 'bank_details', label: 'Bank Details',        desc: 'Bank, branch, account name & number',   defaultOn: false },
+  { key: 'next_of_kin',  label: 'Next of Kin',         desc: 'Name, relationship, phone',             defaultOn: false },
+  { key: 'references',   label: 'References',          desc: 'Referee name, relationship, phone',     defaultOn: false },
+  { key: 'contract',     label: 'Current Contract',    desc: 'Type, dates, salary',                   defaultOn: false },
+  { key: 'assets_issued',label: 'Assets Issued',       desc: 'Item name, quantity, issue date',       defaultOn: false },
+  { key: 'phone_numbers',label: 'Phone Numbers Only',  desc: 'Primary & secondary phone',             defaultOn: false },
 ];
 
-const THREE_WAY = [
-  { value: '', label: 'Any' },
-  { value: 'true', label: 'Yes' },
-  { value: 'false', label: 'No' },
-];
+const DEFAULT_FIELDS = Object.fromEntries(FIELD_CONFIG.map((f) => [f.key, f.defaultOn]));
 
-// Flatten nested object to CSV-friendly columns
-const flattenRow = (row) => {
-  const flat = { ...row };
-  if (Array.isArray(flat.assets_issued)) {
-    flat.assets_issued = flat.assets_summary || '';
-    delete flat.assets_summary;
-  }
-  return flat;
-};
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
-const convertToCSV = (rows) => {
-  if (!rows.length) return '';
-  const flat = rows.map(flattenRow);
-  const skip = new Set(['id', 'assets_summary']);
-  const headers = Object.keys(flat[0]).filter(k => !skip.has(k));
-  const escape = (v) => {
-    const s = String(v ?? '').replace(/"/g, '""');
-    return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s}"` : s;
-  };
-  return [
-    headers.map(escape).join(','),
-    ...flat.map(r => headers.map(h => escape(r[h])).join(',')),
-  ].join('\n');
-};
+/** Popover-based searchable multi-select with tag display. */
+const MultiSelect = ({ label, options, selected, onChange }) => {
+  const [open, setOpen] = useState(false);
 
-const downloadCSV = (content, filename) => {
-  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-};
-
-const MultiCheckList = ({ items, selected, onChange, keyField = 'id', labelField, maxH = '160px' }) => (
-  <div className={`overflow-y-auto border border-slate-200 rounded-md p-2 space-y-1`} style={{ maxHeight: maxH }}>
-    {items.length === 0 ? (
-      <p className="text-xs text-slate-400 px-1 py-2">No options available</p>
-    ) : (
-      items.map(item => {
-        const val = item[keyField];
-        const checked = selected.includes(val);
-        return (
-          <label key={val} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 rounded px-1.5 py-1">
-            <Checkbox
-              checked={checked}
-              onCheckedChange={c => onChange(c ? [...selected, val] : selected.filter(v => v !== val))}
-            />
-            <span className="text-sm text-slate-700">{item[labelField]}</span>
-          </label>
-        );
-      })
-    )}
-  </div>
-);
-
-const SectionHeader = ({ icon: Icon, title }) => (
-  <div className="flex items-center gap-2 mb-4">
-    <div className="p-1.5 bg-slate-100 rounded">
-      <Icon className="w-4 h-4 text-slate-600" />
-    </div>
-    <h2 className="text-base font-semibold text-slate-900">{title}</h2>
-  </div>
-);
-
-const EmployeeReportPage = () => {
-  const { isFullAccess } = useZoneScope();
-
-  const [filters, setFilters] = useState({
-    zone_ids: [],
-    region_ids: [],
-    site_ids: [],
-    client_ids: [],
-    employment_status: [],
-    availability_status: [],
-    contract_status: [],
-    contract_expiry_within_days: '',
-    has_assets_issued: '',
-  });
-
-  const [fields, setFields] = useState({
-    basic: true,
-    employment: true,
-    bank_details: false,
-    next_of_kin: false,
-    references: false,
-    contract: false,
-    assets_issued: false,
-    phone_numbers: false,
-  });
-
-  const [previewData, setPreviewData] = useState(null);
-
-  // Zone filter loads regions
-  const zonesQuery = useQuery({
-    queryKey: ['zones', 'all'],
-    queryFn: () => zoneService.getAll(),
-  });
-  const zones = zonesQuery.data || [];
-
-  const regionsQuery = useQuery({
-    queryKey: ['regions', 'report', filters.zone_ids],
-    queryFn: () => regionService.getAll(
-      filters.zone_ids.length === 1 ? { zone_id: filters.zone_ids[0] } : {}
-    ),
-  });
-  const regions = regionsQuery.data || [];
-
-  const sitesQuery = useQuery({
-    queryKey: ['sites', 'report'],
-    queryFn: () => siteService.getAll(),
-  });
-  const sites = sitesQuery.data?.data || [];
-
-  const clientsQuery = useQuery({
-    queryKey: ['clients', 'report'],
-    queryFn: () => clientService.getAll(),
-  });
-  const clients = clientsQuery.data?.data || [];
-
-  const buildBody = (preview) => ({
-    preview,
-    filters: {
-      zone_ids: filters.zone_ids,
-      region_ids: filters.region_ids,
-      site_ids: filters.site_ids,
-      client_ids: filters.client_ids,
-      employment_status: filters.employment_status,
-      availability_status: filters.availability_status,
-      contract_status: filters.contract_status,
-      contract_expiry_within_days: filters.contract_expiry_within_days
-        ? parseInt(filters.contract_expiry_within_days)
-        : null,
-      has_assets_issued: filters.has_assets_issued === 'true'
-        ? true
-        : filters.has_assets_issued === 'false'
-        ? false
-        : null,
-    },
-    fields,
-  });
-
-  const previewMutation = useMutation({
-    mutationFn: () => reportService.generateEmployeeReport(buildBody(true)),
-    onSuccess: (data) => setPreviewData(data),
-    onError: () => toast.error('Failed to generate preview'),
-  });
-
-  const exportMutation = useMutation({
-    mutationFn: () => reportService.generateEmployeeReport(buildBody(false)),
-    onSuccess: (data) => {
-      const csv = convertToCSV(data.employees);
-      if (!csv) { toast.error('No data to export'); return; }
-      const filename = `employee_report_${new Date().toISOString().slice(0, 10)}.csv`;
-      downloadCSV(csv, filename);
-      toast.success(`Exported ${data.employees.length} records`);
-    },
-    onError: () => toast.error('Export failed'),
-  });
-
-  const setFilter = useCallback((key, val) => setFilters(p => ({ ...p, [key]: val })), []);
-  const toggleFilter = useCallback((key, val) => setFilters(p => {
-    const arr = p[key];
-    return { ...p, [key]: arr.includes(val) ? arr.filter(v => v !== val) : [...arr, val] };
-  }), []);
-  const toggleField = useCallback((key) => setFields(p => ({ ...p, [key]: !p[key] })), []);
-
-  // Build preview table columns from first row
-  const previewColumns = previewData?.employees?.length
-    ? Object.keys(previewData.employees[0]).filter(k => k !== 'id' && k !== 'assets_summary' && !Array.isArray(previewData.employees[0][k]))
-    : [];
-
-  const formatColHeader = (k) => k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  const toggle = (value) =>
+    onChange(
+      selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value],
+    );
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Employee Report Generator</h1>
-        <p className="text-slate-500 text-sm mt-1">Filter employees and select fields to build a custom report</p>
+    <div>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            className="w-full justify-between h-9 font-normal text-sm"
+          >
+            {selected.length === 0 ? (
+              <span className="text-slate-400">Select {label}…</span>
+            ) : (
+              <span className="text-slate-900">
+                {selected.length} {label.toLowerCase()} selected
+              </span>
+            )}
+            <ChevronsUpDown className="w-3.5 h-3.5 ml-2 text-slate-400 shrink-0" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-72 p-0" align="start">
+          <Command>
+            <CommandInput placeholder={`Search ${label.toLowerCase()}…`} className="h-9" />
+            <CommandList>
+              <CommandEmpty>No {label.toLowerCase()} found.</CommandEmpty>
+              <CommandGroup>
+                {options.map((opt) => (
+                  <CommandItem
+                    key={opt.value}
+                    value={opt.label}
+                    onSelect={() => toggle(opt.value)}
+                  >
+                    <div
+                      className={cn(
+                        'mr-2 flex h-4 w-4 items-center justify-center rounded-sm border shrink-0',
+                        selected.includes(opt.value)
+                          ? 'bg-slate-900 border-slate-900'
+                          : 'border-slate-300',
+                      )}
+                    >
+                      {selected.includes(opt.value) && (
+                        <Check className="w-3 h-3 text-white" />
+                      )}
+                    </div>
+                    <span className="truncate">{opt.label}</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-2">
+          {selected.map((v) => {
+            const opt = options.find((o) => o.value === v);
+            return (
+              <Badge
+                key={v}
+                variant="secondary"
+                className="gap-1 py-0 pr-1 text-xs font-normal"
+              >
+                {opt?.label || v}
+                <button
+                  type="button"
+                  onClick={() => toggle(v)}
+                  className="ml-0.5 hover:text-red-500"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </Badge>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+/** Inline checkbox row for status arrays. */
+const CheckboxGroup = ({ options, selected, onChange }) => {
+  const toggle = (value) =>
+    onChange(
+      selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value],
+    );
+  return (
+    <div className="flex flex-wrap gap-x-5 gap-y-2">
+      {options.map((opt) => (
+        <label key={opt.value} className="flex items-center gap-2 cursor-pointer select-none">
+          <Checkbox
+            checked={selected.includes(opt.value)}
+            onCheckedChange={() => toggle(opt.value)}
+            className="h-4 w-4"
+          />
+          <span className="text-sm text-slate-700">{opt.label}</span>
+        </label>
+      ))}
+    </div>
+  );
+};
+
+/** Pill button group — value is compared by identity (handles null/bool). */
+const PillGroup = ({ options, value, onChange }) => (
+  <div className="flex flex-wrap gap-1.5">
+    {options.map(({ label, v }) => (
+      <button
+        key={label}
+        type="button"
+        onClick={() => onChange(v)}
+        className={cn(
+          'px-3 py-1 text-sm rounded-md border transition-colors',
+          value === v
+            ? 'bg-slate-900 text-white border-slate-900'
+            : 'bg-white text-slate-700 border-slate-200 hover:border-slate-400',
+        )}
+      >
+        {label}
+      </button>
+    ))}
+  </div>
+);
+
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
+const EmployeeReportPage = () => {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const { isFullAccess } = useZoneScope();
+
+  // Seed contract_expiry_within_days from ?contractExpiry= URL param
+  const [filters, setFilters] = useState(() => {
+    const expiry = searchParams.get('contractExpiry');
+    return {
+      zone_ids: [],
+      region_ids: [],
+      site_ids: [],
+      client_ids: [],
+      employment_status: [],
+      availability_status: [],
+      contract_status: [],
+      contract_expiry_within_days: expiry ? parseInt(expiry, 10) : null,
+      has_disciplinary: null,
+      has_assets_issued: null,
+    };
+  });
+
+  const [fields, setFields] = useState(DEFAULT_FIELDS);
+
+  // ── Data for filter dropdowns ───────────────────────────────────────────────
+  const zonesQuery = useQuery({
+    queryKey: ['zones'],
+    queryFn: () => zoneService.getAll(),
+    staleTime: 5 * 60 * 1000,
+  });
+  const regionsQuery = useQuery({
+    queryKey: ['regions'],
+    queryFn: () => regionService.getAll(),
+    staleTime: 5 * 60 * 1000,
+  });
+  const sitesQuery = useQuery({
+    queryKey: ['sites', 'report'],
+    queryFn: () => siteService.getAll({ page_size: 200, status_filter: 'active' }),
+    staleTime: 5 * 60 * 1000,
+  });
+  const clientsQuery = useQuery({
+    queryKey: ['clients', 'report'],
+    queryFn: () => clientService.getAll({ page_size: 100 }),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const allZones   = zonesQuery.data   || [];
+  const allRegions = regionsQuery.data || [];
+  const allSites   = sitesQuery.data?.data   || [];
+  const allClients = clientsQuery.data?.data || [];
+
+  // Cascade: regions filtered to selected zones
+  const visibleRegions =
+    filters.zone_ids.length > 0
+      ? allRegions.filter((r) => filters.zone_ids.includes(String(r.zone_id)))
+      : allRegions;
+
+  // ── Filter helpers ──────────────────────────────────────────────────────────
+  const setFilter = useCallback((key, val) => {
+    setFilters((p) => ({ ...p, [key]: val }));
+  }, []);
+
+  const clearFilters = useCallback(() => {
+    setFilters({
+      zone_ids: [],
+      region_ids: [],
+      site_ids: [],
+      client_ids: [],
+      employment_status: [],
+      availability_status: [],
+      contract_status: [],
+      contract_expiry_within_days: null,
+      has_disciplinary: null,
+      has_assets_issued: null,
+    });
+  }, []);
+
+  const handleGenerate = () => {
+    navigate('/reports/employees/results', { state: { filters, fields } });
+  };
+
+  const toggleField = useCallback(
+    (key) => setFields((p) => ({ ...p, [key]: !p[key] })),
+    [],
+  );
+
+  const activeFilterCount = [
+    filters.zone_ids.length > 0,
+    filters.region_ids.length > 0,
+    filters.site_ids.length > 0,
+    filters.client_ids.length > 0,
+    filters.employment_status.length > 0,
+    filters.availability_status.length > 0,
+    filters.contract_status.length > 0,
+    filters.contract_expiry_within_days !== null,
+    filters.has_disciplinary !== null,
+    filters.has_assets_issued !== null,
+  ].filter(Boolean).length;
+
+  return (
+    <div className="space-y-6 max-w-5xl" data-testid="employee-report-page">
+
+      {/* Page header */}
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+            Employee Report Generator
+          </h1>
+          <p className="text-slate-500 text-sm mt-1">
+            Select filters and fields, preview results, then export to CSV or print.
+          </p>
+        </div>
+        {activeFilterCount > 0 && (
+          <div className="flex items-center gap-2 mt-1 shrink-0">
+            <Badge variant="secondary" className="text-xs font-normal gap-1">
+              {activeFilterCount} filter{activeFilterCount !== 1 ? 's' : ''} active
+            </Badge>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearFilters}
+              className="h-7 px-2 text-xs text-slate-500 hover:text-slate-900"
+            >
+              <X className="w-3 h-3 mr-1" />
+              Clear
+            </Button>
+          </div>
+        )}
       </div>
 
-      {/* ── Filters ── */}
-      <Card>
-        <CardContent className="pt-5">
-          <SectionHeader icon={Filter} title="Filters" />
+      {/* ── Step 1: Filters ─────────────────────────────────────────────────── */}
+      <Card className="border-slate-200">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-semibold text-slate-900 flex items-center gap-2">
+            <span className="w-6 h-6 rounded-full bg-slate-900 text-white text-xs flex items-center justify-center font-bold shrink-0">
+              1
+            </span>
+            Filter Employees By
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-5">
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Zone */}
+          {/* Zone / Region / Site / Client */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {isFullAccess && (
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-700">Zone</label>
-                <MultiCheckList
-                  items={zones}
+              <div>
+                <p className="text-sm font-medium text-slate-700 mb-1.5">Zone</p>
+                <MultiSelect
+                  label="Zones"
+                  options={allZones.map((z) => ({ value: String(z.id), label: z.zone_name }))}
                   selected={filters.zone_ids}
-                  onChange={v => setFilter('zone_ids', v)}
-                  labelField="zone_name"
+                  onChange={(v) => {
+                    setFilters((p) => ({ ...p, zone_ids: v, region_ids: [] }));
+                  }}
                 />
               </div>
             )}
-
-            {/* Region */}
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700">Region</label>
-              <MultiCheckList
-                items={regions}
+            <div>
+              <p className="text-sm font-medium text-slate-700 mb-1.5">
+                Region
+                {filters.zone_ids.length > 0 && (
+                  <span className="ml-1 text-xs font-normal text-slate-400">(filtered by zone)</span>
+                )}
+              </p>
+              <MultiSelect
+                label="Regions"
+                options={visibleRegions.map((r) => ({
+                  value: String(r.id),
+                  label: r.region_name,
+                }))}
                 selected={filters.region_ids}
-                onChange={v => setFilter('region_ids', v)}
-                labelField="region_name"
+                onChange={(v) => setFilter('region_ids', v)}
               />
             </div>
-
-            {/* Site */}
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700">Site</label>
-              <MultiCheckList
-                items={sites}
-                selected={filters.site_ids}
-                onChange={v => setFilter('site_ids', v)}
-                labelField="site_name"
-              />
-            </div>
-
-            {/* Client */}
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700">Client</label>
-              <MultiCheckList
-                items={clients}
+            <div>
+              <p className="text-sm font-medium text-slate-700 mb-1.5">Client</p>
+              <MultiSelect
+                label="Clients"
+                options={allClients.map((c) => ({ value: String(c.id), label: c.client_name }))}
                 selected={filters.client_ids}
-                onChange={v => setFilter('client_ids', v)}
-                labelField="client_name"
+                onChange={(v) => setFilter('client_ids', v)}
+              />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-slate-700 mb-1.5">Site</p>
+              <MultiSelect
+                label="Sites"
+                options={allSites.map((s) => ({ value: String(s.id), label: s.site_name }))}
+                selected={filters.site_ids}
+                onChange={(v) => setFilter('site_ids', v)}
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
-            {/* Employment Status */}
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700">Employment Status</label>
-              <div className="space-y-1.5">
-                {EMPLOYMENT_STATUSES.map(s => (
-                  <label key={s.value} className="flex items-center gap-2 cursor-pointer">
-                    <Checkbox
-                      checked={filters.employment_status.includes(s.value)}
-                      onCheckedChange={() => toggleFilter('employment_status', s.value)}
-                    />
-                    <span className="text-sm text-slate-700">{s.label}</span>
-                  </label>
-                ))}
-              </div>
+          <Separator />
+
+          {/* Status checkboxes */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+            <div>
+              <p className="text-sm font-medium text-slate-700 mb-2">Employment Status</p>
+              <CheckboxGroup
+                options={EMPLOYMENT_STATUS_OPTIONS}
+                selected={filters.employment_status}
+                onChange={(v) => setFilter('employment_status', v)}
+              />
             </div>
-
-            {/* Availability */}
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700">Availability</label>
-              <div className="space-y-1.5">
-                {AVAILABILITY_STATUSES.map(s => (
-                  <label key={s.value} className="flex items-center gap-2 cursor-pointer">
-                    <Checkbox
-                      checked={filters.availability_status.includes(s.value)}
-                      onCheckedChange={() => toggleFilter('availability_status', s.value)}
-                    />
-                    <span className="text-sm text-slate-700">{s.label}</span>
-                  </label>
-                ))}
-              </div>
-
-              <div className="mt-4 space-y-1.5">
-                <label className="text-sm font-medium text-slate-700">Contract Status</label>
-                {CONTRACT_STATUSES.map(s => (
-                  <label key={s.value} className="flex items-center gap-2 cursor-pointer">
-                    <Checkbox
-                      checked={filters.contract_status.includes(s.value)}
-                      onCheckedChange={() => toggleFilter('contract_status', s.value)}
-                    />
-                    <span className="text-sm text-slate-700">{s.label}</span>
-                  </label>
-                ))}
-              </div>
+            <div>
+              <p className="text-sm font-medium text-slate-700 mb-2">Availability</p>
+              <CheckboxGroup
+                options={AVAILABILITY_OPTIONS}
+                selected={filters.availability_status}
+                onChange={(v) => setFilter('availability_status', v)}
+              />
             </div>
+            <div>
+              <p className="text-sm font-medium text-slate-700 mb-2">Contract Status</p>
+              <CheckboxGroup
+                options={CONTRACT_STATUS_OPTIONS}
+                selected={filters.contract_status}
+                onChange={(v) => setFilter('contract_status', v)}
+              />
+            </div>
+          </div>
 
-            {/* Contract expiry + assets */}
-            <div className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-700">Contract Expiring</label>
-                <Select
-                  value={filters.contract_expiry_within_days}
-                  onValueChange={v => setFilter('contract_expiry_within_days', v)}
-                >
-                  <SelectTrigger className="h-9">
-                    <SelectValue placeholder="Any" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {EXPIRY_OPTIONS.map(o => (
-                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+          <Separator />
+
+          {/* Expiry + tri-state */}
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm font-medium text-slate-700 mb-2">Contract Expiring Within</p>
+              <PillGroup
+                value={filters.contract_expiry_within_days}
+                onChange={(v) => setFilter('contract_expiry_within_days', v)}
+                options={EXPIRY_DAYS.map((d) => ({ label: d ? `${d} days` : 'Any', v: d }))}
+              />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <div>
+                <p className="text-sm font-medium text-slate-700 mb-2">Has Disciplinary Events</p>
+                <PillGroup
+                  value={filters.has_disciplinary}
+                  onChange={(v) => setFilter('has_disciplinary', v)}
+                  options={TRI_STATE}
+                />
               </div>
-
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-700">Has Assets Issued</label>
-                <div className="flex gap-2">
-                  {THREE_WAY.map(o => (
-                    <button
-                      key={o.value}
-                      type="button"
-                      onClick={() => setFilter('has_assets_issued', o.value)}
-                      className={`flex-1 py-1.5 text-xs font-medium rounded border transition-colors ${
-                        filters.has_assets_issued === o.value
-                          ? 'bg-[#0F172A] text-white border-[#0F172A]'
-                          : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
-                      }`}
-                    >
-                      {o.label}
-                    </button>
-                  ))}
-                </div>
+              <div>
+                <p className="text-sm font-medium text-slate-700 mb-2">Has Assets Issued</p>
+                <PillGroup
+                  value={filters.has_assets_issued}
+                  onChange={(v) => setFilter('has_assets_issued', v)}
+                  options={TRI_STATE}
+                />
               </div>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* ── Fields ── */}
-      <Card>
-        <CardContent className="pt-5">
-          <SectionHeader icon={Columns} title="Select Information to Include" />
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {FIELD_GROUPS.map(fg => (
+      {/* ── Step 2: Fields ──────────────────────────────────────────────────── */}
+      <Card className="border-slate-200">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-semibold text-slate-900 flex items-center gap-2">
+            <span className="w-6 h-6 rounded-full bg-slate-900 text-white text-xs flex items-center justify-center font-bold shrink-0">
+              2
+            </span>
+            Select Information to Include
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {FIELD_CONFIG.map((f) => (
               <label
-                key={fg.key}
-                className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                  fields[fg.key]
+                key={f.key}
+                className={cn(
+                  'flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors select-none',
+                  fields[f.key]
                     ? 'border-slate-900 bg-slate-50'
-                    : 'border-slate-200 hover:border-slate-300'
-                }`}
+                    : 'border-slate-200 hover:border-slate-300',
+                )}
               >
                 <Checkbox
-                  checked={fields[fg.key]}
-                  onCheckedChange={() => toggleField(fg.key)}
-                  className="mt-0.5"
+                  checked={fields[f.key]}
+                  onCheckedChange={() => toggleField(f.key)}
+                  className="mt-0.5 shrink-0"
                 />
                 <div>
-                  <p className="text-sm font-medium text-slate-900">{fg.label}</p>
-                  <p className="text-xs text-slate-500 mt-0.5">{fg.desc}</p>
+                  <p className="text-sm font-medium text-slate-900">{f.label}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">{f.desc}</p>
                 </div>
               </label>
             ))}
@@ -430,89 +504,29 @@ const EmployeeReportPage = () => {
         </CardContent>
       </Card>
 
-      {/* ── Preview & Export ── */}
-      <Card>
-        <CardContent className="pt-5">
-          <SectionHeader icon={Eye} title="Preview & Export" />
-
-          <div className="flex flex-wrap items-center gap-3 mb-5">
+      {/* ── Step 3: Generate ───────────────────────────────────────────────── */}
+      <Card className="border-slate-200">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-semibold text-slate-900 flex items-center gap-2">
+            <span className="w-6 h-6 rounded-full bg-slate-900 text-white text-xs flex items-center justify-center font-bold shrink-0">
+              3
+            </span>
+            Generate Report
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-4">
             <Button
-              onClick={() => previewMutation.mutate()}
-              disabled={previewMutation.isPending}
+              onClick={handleGenerate}
               className="bg-[#0F172A] hover:bg-slate-800"
             >
-              {previewMutation.isPending
-                ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Generating…</>
-                : <><Eye className="w-4 h-4 mr-2" />Generate Preview</>
-              }
+              <FileText className="w-4 h-4 mr-2" />
+              Generate Report
             </Button>
-
-            {previewData && (
-              <>
-                <Button
-                  variant="outline"
-                  onClick={() => exportMutation.mutate()}
-                  disabled={exportMutation.isPending}
-                >
-                  {exportMutation.isPending
-                    ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Exporting…</>
-                    : <><Download className="w-4 h-4 mr-2" />Export CSV</>
-                  }
-                </Button>
-
-                <Button
-                  variant="outline"
-                  onClick={() => window.print()}
-                >
-                  <Printer className="w-4 h-4 mr-2" />
-                  Print
-                </Button>
-              </>
-            )}
+            <p className="text-xs text-slate-400">
+              Opens a full results page with export and print options.
+            </p>
           </div>
-
-          {previewData && (
-            <>
-              <div className="flex items-center gap-2 mb-3">
-                <Users className="w-4 h-4 text-slate-500" />
-                <span className="text-sm text-slate-700">
-                  <strong>{previewData.total_count}</strong> employee{previewData.total_count !== 1 ? 's' : ''} match your filters
-                  {previewData.is_preview && previewData.total_count > 10 && (
-                    <span className="text-slate-400 ml-1">(showing first 10)</span>
-                  )}
-                </span>
-              </div>
-
-              {previewData.employees.length === 0 ? (
-                <p className="text-sm text-slate-500 py-6 text-center">No employees match the selected filters.</p>
-              ) : (
-                <div className="overflow-x-auto border border-slate-200 rounded-lg">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-slate-50">
-                        {previewColumns.map(col => (
-                          <TableHead key={col} className="text-xs font-semibold whitespace-nowrap">
-                            {formatColHeader(col)}
-                          </TableHead>
-                        ))}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {previewData.employees.map((row) => (
-                        <TableRow key={row.id}>
-                          {previewColumns.map(col => (
-                            <TableCell key={col} className="text-sm whitespace-nowrap max-w-[200px] truncate">
-                              {String(row[col] ?? '')}
-                            </TableCell>
-                          ))}
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </>
-          )}
         </CardContent>
       </Card>
     </div>

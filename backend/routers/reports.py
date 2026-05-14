@@ -9,7 +9,7 @@ from datetime import date, timedelta
 from uuid import UUID
 
 from db.dependencies import get_db
-from models.employee import Employee, EmployeeBankAccount, EmployeeNextOfKin, EmployeeReferee, EmployeeContract
+from models.employee import Employee, EmployeeBankAccount, EmployeeNextOfKin, EmployeeReferee, EmployeeContract, EmployeeDocument
 from models.inventory import InventoryIssuance, InventoryItem
 from models.site import Site
 from models.zone import Zone, Region
@@ -31,6 +31,7 @@ class ReportFilters(PydanticModel):
     availability_status: List[str] = []
     contract_status: List[str] = []
     contract_expiry_within_days: Optional[int] = None
+    has_disciplinary: Optional[bool] = None
     has_assets_issued: Optional[bool] = None
 
 
@@ -172,6 +173,16 @@ async def generate_employee_report(
             EmployeeContract.end_date <= cutoff,
         ).distinct()
         where.append(Employee.id.in_(emp_expiring))
+
+    if f.has_disciplinary is not None:
+        emp_with_disc = select(EmployeeDocument.employee_id).where(
+            EmployeeDocument.org_id == org_id,
+            EmployeeDocument.document_type == 'disciplinary_letter',
+        ).distinct()
+        if f.has_disciplinary:
+            where.append(Employee.id.in_(emp_with_disc))
+        else:
+            where.append(Employee.id.notin_(emp_with_disc))
 
     if f.has_assets_issued is not None:
         emp_with_assets = select(InventoryIssuance.issued_to_id).where(

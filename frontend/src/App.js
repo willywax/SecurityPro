@@ -35,6 +35,7 @@ import DailyLogsPage from './pages/DailyLogsPage';
 import SubmitDailyLogPage from './pages/SubmitDailyLogPage';
 import DailyLogDetailPage from './pages/DailyLogDetailPage';
 import EmployeeReportPage from './pages/EmployeeReportPage';
+import EmployeeReportResultsPage from './pages/EmployeeReportResultsPage';
 import { Toaster } from './components/ui/sonner';
 
 // Placeholder pages for navigation items
@@ -97,6 +98,7 @@ function App() {
             <Route path="/daily-logs/new" element={<SubmitDailyLogPage />} />
             <Route path="/daily-logs/:id" element={<DailyLogDetailPage />} />
             <Route path="/reports/employees" element={<EmployeeReportPage />} />
+            <Route path="/reports/employees/results" element={<EmployeeReportResultsPage />} />
             <Route path="/settings" element={<PlaceholderPage title="Settings" />} />
           </Route>
 
