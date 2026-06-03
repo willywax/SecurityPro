@@ -6,6 +6,7 @@ import logging
 from datetime import timedelta
 from pathlib import Path
 from typing import Optional
+from urllib.parse import quote
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +104,23 @@ class StorageService:
         if not self.cdn_base_url:
             return None
         return f"{self.cdn_base_url}/{gcs_path.lstrip('/')}"
+
+    def get_direct_url(self, gcs_path: str) -> str:
+        """Return the standard browser URL for a GCS object."""
+        encoded_path = quote(gcs_path.lstrip("/"), safe="/")
+        return f"https://storage.googleapis.com/{self.bucket_name}/{encoded_path}"
+
+    def get_view_url(self, gcs_path: str, expiry_minutes: int = 60) -> str:
+        """Return the best browser-viewable URL for a GCS object."""
+        public_url = self.get_public_url(gcs_path)
+        if public_url:
+            return public_url
+
+        try:
+            return self.get_signed_url(gcs_path, expiry_minutes=expiry_minutes)
+        except Exception as exc:
+            logger.warning(f"GCS signed URL failed for {gcs_path}; falling back to direct URL: {exc}")
+            return self.get_direct_url(gcs_path)
 
     def get_signed_url(self, gcs_path: str, expiry_minutes: int = 60) -> str:
         """Generate a signed GET URL valid for `expiry_minutes`."""

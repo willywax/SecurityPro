@@ -1,18 +1,23 @@
 #!/bin/bash
+set -e
 
-# Set your GCP project ID
 PROJECT_ID="elitagroup"
 REGION="us-central1"
+TAG=$(git rev-parse --short HEAD)
 
-echo "Deploying SecurityPro Backend and Frontend to Google Cloud Run..."
+echo "==> Deploying SecurityPro  [tag: $TAG]"
 
-# Build and deploy backend
-echo "Building backend..."
-gcloud builds submit --config backend/cloudbuild.yaml --project $PROJECT_ID
+# ── Backend ──────────────────────────────────────────────────────────────────
+echo ""
+echo "[1/4] Building backend image..."
+gcloud builds submit \
+  --config backend/cloudbuild.yaml \
+  --substitutions TAG_NAME=$TAG \
+  --project $PROJECT_ID
 
-echo "Deploying backend to Cloud Run..."
+echo "[2/4] Deploying backend to Cloud Run..."
 gcloud run deploy securitypro-backend \
-  --image gcr.io/$PROJECT_ID/securitypro-backend:v1 \
+  --image gcr.io/$PROJECT_ID/securitypro-backend:$TAG \
   --platform managed \
   --region $REGION \
   --allow-unauthenticated \
@@ -24,20 +29,22 @@ gcloud run deploy securitypro-backend \
   --set-secrets "GOOGLE_APPLICATION_CREDENTIALS=gcs-key:latest" \
   --project $PROJECT_ID
 
-# Get backend URL
-BACKEND_URL=$(gcloud run services describe securitypro-backend --platform managed --region $REGION --project $PROJECT_ID --format "value(status.url)")
+BACKEND_URL=$(gcloud run services describe securitypro-backend \
+  --platform managed --region $REGION --project $PROJECT_ID \
+  --format "value(status.url)")
+echo "    Backend: $BACKEND_URL"
 
-echo "Backend deployed at: $BACKEND_URL"
-
-# Build and deploy frontend
-echo "Building frontend..."
-gcloud builds submit --config frontend/cloudbuild.yaml \
-  --substitutions _VITE_API_URL=$BACKEND_URL \
+# ── Frontend ─────────────────────────────────────────────────────────────────
+echo ""
+echo "[3/4] Building frontend image..."
+gcloud builds submit \
+  --config frontend/cloudbuild.yaml \
+  --substitutions TAG_NAME=$TAG,_VITE_API_URL=$BACKEND_URL \
   --project $PROJECT_ID
 
-echo "Deploying frontend to Cloud Run..."
+echo "[4/4] Deploying frontend to Cloud Run..."
 gcloud run deploy securitypro-frontend \
-  --image gcr.io/$PROJECT_ID/securitypro-frontend:v5 \
+  --image gcr.io/$PROJECT_ID/securitypro-frontend:$TAG \
   --platform managed \
   --region $REGION \
   --allow-unauthenticated \
@@ -47,8 +54,12 @@ gcloud run deploy securitypro-frontend \
   --max-instances 10 \
   --project $PROJECT_ID
 
-# Get frontend URL
-FRONTEND_URL=$(gcloud run services describe securitypro-frontend --platform managed --region $REGION --project $PROJECT_ID --format "value(status.url)")
+FRONTEND_URL=$(gcloud run services describe securitypro-frontend \
+  --platform managed --region $REGION --project $PROJECT_ID \
+  --format "value(status.url)")
+echo "    Frontend: $FRONTEND_URL"
 
-echo "Frontend deployed at: $FRONTEND_URL"
-echo "Deployment complete!"
+echo ""
+echo "==> Deployment complete!"
+echo "    Frontend : $FRONTEND_URL"
+echo "    Backend  : $BACKEND_URL"

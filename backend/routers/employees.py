@@ -472,13 +472,16 @@ def build_employee_response_from_maps(employee: Employee, regions_by_id: dict, z
     emp_dict["zone_name"] = None
     emp_dict["current_site_name"] = None
     emp_dict["photo_url"] = None
+    emp_dict["profile_photo"] = normalize_local_upload_url(employee.profile_photo)
 
     if employee.photo_path:
         try:
             from services.storage_service import storage_service
-            emp_dict["photo_url"] = storage_service.get_public_url(employee.photo_path)
+            emp_dict["photo_url"] = storage_service.get_view_url(employee.photo_path, expiry_minutes=60)
         except Exception:
             emp_dict["photo_url"] = None
+    elif emp_dict["profile_photo"]:
+        emp_dict["photo_url"] = emp_dict["profile_photo"]
 
     region = regions_by_id.get(employee.region_id)
     if region:
@@ -491,6 +494,22 @@ def build_employee_response_from_maps(employee: Employee, regions_by_id: dict, z
         emp_dict["current_site_name"] = site.site_name if site else None
 
     return emp_dict
+
+
+def normalize_local_upload_url(file_path: Optional[str]) -> Optional[str]:
+    """Convert stored local upload paths into URLs served by StaticFiles."""
+    if not file_path:
+        return None
+    if file_path.startswith(("http://", "https://", "/uploads/")):
+        return file_path
+
+    try:
+        path = Path(file_path)
+        relative_path = path.resolve().relative_to(UPLOAD_DIR.resolve())
+        return f"/uploads/{relative_path.as_posix()}"
+    except Exception:
+        filename = Path(file_path).name
+        return f"/uploads/photos/{filename}" if filename else None
 
 
 async def build_employee_issued_asset_response(issuance: InventoryIssuance, db: AsyncSession) -> dict:
@@ -629,7 +648,14 @@ async def get_employees(
     if status_filter:
         query = query.where(Employee.employment_status == status_filter)
     elif status_in:
-        statuses = [s.strip() for s in status_in.split(',') if s.strip()]
+        raw_statuses = [s.strip() for s in status_in.split(',') if s.strip()]
+        invalid_statuses = [s for s in raw_statuses if s not in EmploymentStatus._value2member_map_]
+        if invalid_statuses:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid employment status: {', '.join(invalid_statuses)}",
+            )
+        statuses = [EmploymentStatus(s) for s in raw_statuses]
         if statuses:
             query = query.where(Employee.employment_status.in_(statuses))
     if availability_status:
@@ -1488,7 +1514,7 @@ async def upload_gcs_photo(
     employee.photo_path = gcs_path
     await db.commit()
 
-    photo_url = storage_service.get_public_url(gcs_path) or storage_service.get_signed_url(gcs_path, expiry_minutes=60)
+    photo_url = storage_service.get_view_url(gcs_path, expiry_minutes=60)
     return {"photo_url": photo_url, "gcs_path": gcs_path}
 
 
@@ -1512,7 +1538,7 @@ async def get_gcs_photo(
         return {"photo_url": None}
 
     try:
-        photo_url = storage_service.get_public_url(employee.photo_path) or storage_service.get_signed_url(employee.photo_path, expiry_minutes=60)
+        photo_url = storage_service.get_view_url(employee.photo_path, expiry_minutes=60)
         return {"photo_url": photo_url, "gcs_path": employee.photo_path}
     except Exception:
         return {"photo_url": None}

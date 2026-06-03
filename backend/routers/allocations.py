@@ -132,6 +132,16 @@ async def _check_zone_access(db: AsyncSession, org_id: UUID, user_id: UUID, role
     return zone.id in managed
 
 
+def _get_employee_photo_url(employee: Optional[Employee]) -> Optional[str]:
+    if not employee or not employee.photo_path:
+        return None
+    try:
+        from services.storage_service import storage_service
+        return storage_service.get_view_url(employee.photo_path, expiry_minutes=60)
+    except Exception:
+        return None
+
+
 async def _build_allocation_response(
     alloc: EmployeeSiteAllocation,
     db: AsyncSession,
@@ -148,13 +158,7 @@ async def _build_allocation_response(
         zone = (await db.execute(select(Zone).where(Zone.id == alloc.zone_id))).scalar_one_or_none()
         zone_name = zone.zone_name if zone else None
 
-    photo_url = None
-    if employee and employee.photo_path:
-        try:
-            from services.storage_service import storage_service
-            photo_url = storage_service.get_public_url(employee.photo_path)
-        except Exception:
-            pass
+    photo_url = _get_employee_photo_url(employee)
 
     return {
         "id": alloc.id,
@@ -479,13 +483,7 @@ async def get_site_guards(
     for a in allocs:
         emp = employees_map.get(a.employee_id)
         zone_obj = zones_map.get(a.zone_id) if a.zone_id else None
-        photo_url = None
-        if emp and emp.photo_path:
-            try:
-                from services.storage_service import storage_service
-                photo_url = storage_service.get_public_url(emp.photo_path)
-            except Exception:
-                pass
+        photo_url = _get_employee_photo_url(emp)
         out.append({
             "id": a.id,
             "employee_id": a.employee_id,
@@ -541,13 +539,7 @@ async def get_employee_allocation_history(
         for z in z_res.scalars().all():
             zones_map[z.id] = z
 
-    photo_url = None
-    if employee and employee.photo_path:
-        try:
-            from services.storage_service import storage_service
-            photo_url = storage_service.get_public_url(employee.photo_path)
-        except Exception:
-            pass
+    photo_url = _get_employee_photo_url(employee)
 
     out = []
     for a in allocs:
@@ -695,13 +687,7 @@ async def get_zone_allocation_overview(
         for a in site_allocs:
             emp = alloc_employees_map.get(a.employee_id)
             zone_obj = alloc_zones_map.get(a.zone_id) if a.zone_id else None
-            photo_url = None
-            if emp and emp.photo_path:
-                try:
-                    from services.storage_service import storage_service
-                    photo_url = storage_service.get_public_url(emp.photo_path)
-                except Exception:
-                    pass
+            photo_url = _get_employee_photo_url(emp)
             guard_list.append({
                 "id": a.id,
                 "employee_id": a.employee_id,
