@@ -1,6 +1,7 @@
 # Employee Router - CRUD operations for HR Records module - Migrated to SQLAlchemy
 
 from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File, Query
+from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload
@@ -479,7 +480,7 @@ def build_employee_response_from_maps(employee: Employee, regions_by_id: dict, z
             from services.storage_service import storage_service
             emp_dict["photo_url"] = storage_service.get_view_url(employee.photo_path, expiry_minutes=60)
         except Exception:
-            emp_dict["photo_url"] = None
+            emp_dict["photo_url"] = f"/api/employees/{employee.id}/photo/view"
     elif emp_dict["profile_photo"]:
         emp_dict["photo_url"] = emp_dict["profile_photo"]
 
@@ -1541,7 +1542,24 @@ async def get_gcs_photo(
         photo_url = storage_service.get_view_url(employee.photo_path, expiry_minutes=60)
         return {"photo_url": photo_url, "gcs_path": employee.photo_path}
     except Exception:
-        return {"photo_url": None}
+        return {"photo_url": f"/api/employees/{employee_id}/photo/view", "gcs_path": employee.photo_path}
+
+
+@router.get("/{employee_id}/photo/view")
+async def view_employee_photo(
+    employee_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Redirect browsers to a viewable employee photo URL."""
+    from services.storage_service import storage_service
+
+    result = await db.execute(select(Employee).where(Employee.id == employee_id))
+    employee = result.scalar_one_or_none()
+    if not employee or not employee.photo_path:
+        raise HTTPException(status_code=404, detail="Photo not found")
+
+    photo_url = storage_service.get_view_url(employee.photo_path, expiry_minutes=60)
+    return RedirectResponse(photo_url, status_code=302)
 
 
 @router.delete("/{employee_id}/photo")

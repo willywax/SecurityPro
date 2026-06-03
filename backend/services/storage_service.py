@@ -3,6 +3,7 @@
 import os
 import uuid
 import logging
+import json
 from datetime import timedelta
 from pathlib import Path
 from typing import Optional
@@ -32,21 +33,38 @@ class StorageService:
         try:
             from google.cloud import storage
 
-            creds_file = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "./gcs-key.json")
+            creds_value = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "./gcs-key.json")
 
-            if os.path.exists(creds_file):
+            if os.path.exists(creds_value):
                 # Local dev: use service account key file
                 from google.oauth2 import service_account
                 self._credentials = service_account.Credentials.from_service_account_file(
-                    creds_file,
+                    creds_value,
                     scopes=["https://www.googleapis.com/auth/cloud-platform"],
                 )
                 self._client = storage.Client(credentials=self._credentials)
                 self._use_key_signing = True
                 logger.info("GCS: initialized with service account key file")
+            elif creds_value.strip().startswith("{"):
+                # Cloud Run Secret Manager env var: service account JSON content.
+                from google.oauth2 import service_account
+                self._credentials = service_account.Credentials.from_service_account_info(
+                    json.loads(creds_value),
+                    scopes=["https://www.googleapis.com/auth/cloud-platform"],
+                )
+                self._client = storage.Client(credentials=self._credentials)
+                self._use_key_signing = True
+                logger.info("GCS: initialized with service account JSON from env")
             else:
-                # Cloud Run / Workload Identity: Application Default Credentials
-                self._client = storage.Client()
+                # Cloud Run / Workload Identity: Application Default Credentials.
+                # If GOOGLE_APPLICATION_CREDENTIALS contains a non-file value, do not
+                # let google-auth treat it as a broken file path.
+                old_credentials_env = os.environ.pop("GOOGLE_APPLICATION_CREDENTIALS", None)
+                try:
+                    self._client = storage.Client()
+                finally:
+                    if old_credentials_env is not None:
+                        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = old_credentials_env
                 self._use_key_signing = False
                 logger.info("GCS: initialized with Application Default Credentials (Workload Identity)")
 
@@ -143,9 +161,14 @@ class StorageService:
             import google.auth
             import google.auth.transport.requests
 
-            credentials, _ = google.auth.default(
-                scopes=["https://www.googleapis.com/auth/cloud-platform"]
-            )
+            old_credentials_env = os.environ.pop("GOOGLE_APPLICATION_CREDENTIALS", None)
+            try:
+                credentials, _ = google.auth.default(
+                    scopes=["https://www.googleapis.com/auth/cloud-platform"]
+                )
+            finally:
+                if old_credentials_env is not None:
+                    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = old_credentials_env
             request = google.auth.transport.requests.Request()
             credentials.refresh(request)
 
@@ -182,9 +205,14 @@ class StorageService:
             import google.auth
             import google.auth.transport.requests
 
-            credentials, _ = google.auth.default(
-                scopes=["https://www.googleapis.com/auth/cloud-platform"]
-            )
+            old_credentials_env = os.environ.pop("GOOGLE_APPLICATION_CREDENTIALS", None)
+            try:
+                credentials, _ = google.auth.default(
+                    scopes=["https://www.googleapis.com/auth/cloud-platform"]
+                )
+            finally:
+                if old_credentials_env is not None:
+                    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = old_credentials_env
             request = google.auth.transport.requests.Request()
             credentials.refresh(request)
 

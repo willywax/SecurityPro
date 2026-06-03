@@ -58,6 +58,10 @@ const DEFAULT_REFEREE_FORM = { full_name: '', referee_relationship: '', phone_nu
 const DEFAULT_KIN_FORM = { full_name: '', kin_relationship: '', phone_1: '', phone_2: '', id_type: '', id_number: '', occupation: '', address: '', notes: '' };
 const RELATIONSHIP_LABELS = Object.fromEntries(RELATIONSHIP_OPTIONS.map((option) => [option.value, option.label]));
 const ID_TYPE_LABELS = Object.fromEntries(ID_TYPE_OPTIONS.map((option) => [option.value, option.label]));
+const resolveMediaUrl = (url) => {
+  if (!url) return null;
+  return url.startsWith('http') ? url : `${API_BASE_URL}${url}`;
+};
 
 const Section = ({ loading, items, emptyText, render }) => {
   if (loading) {
@@ -286,7 +290,7 @@ const EmployeeDetail = () => {
   if (employeeQuery.isLoading || !form) return <div className="flex items-center justify-center py-24"><Loader2 className="w-8 h-8 animate-spin text-slate-400" /></div>;
   if (employeeQuery.isError) return <Card><CardContent className="py-12 text-center text-red-600">{formatApiError(employeeQuery.error, 'Failed to load employee')}</CardContent></Card>;
 
-  const avatarSrc = photoUrl || (employee.profile_photo ? `${API_BASE_URL}${employee.profile_photo}` : null);
+  const avatarSrc = resolveMediaUrl(photoUrl || employee.profile_photo);
   const removeItem = async (promise, section, message) => {
     try {
       await promise;
